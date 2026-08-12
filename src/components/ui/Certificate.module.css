@@ -1,0 +1,66 @@
+/* Share certificate. Diagonal hatching stands in for security-paper guilloche. */
+.cert {
+  padding: 24px 20px;
+  background: var(--void);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(255, 255, 255, 0.05) 6px 12px
+  );
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 1px solid var(--paper);
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.cert h3 {
+  font-family: var(--gothic);
+  font-size: clamp(28px, 6.5vw, 40px);
+  line-height: 0.98;
+}
+
+.serial {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cert dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.cert dt {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--smoke);
+}
+
+.cert dd {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 17px;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.note {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ash);
+  font-size: 14px;
+  color: var(--smoke);
+  max-width: 56ch;
+}

@@ -1,0 +1,72 @@
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--iron);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  /* Not fully opaque — the dither field stays faintly visible behind it. */
+  background: rgba(0, 0, 0, 0.86);
+  backdrop-filter: blur(2px);
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.seal {
+  width: 42px;
+  height: 42px;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--gothic);
+  font-size: 22px;
+  line-height: 1;
+  flex: none;
+  filter: url(#rough);
+  /* Pirata One sits high in its box; nudge the glyph back to centre. */
+  padding-bottom: 3px;
+}
+
+.name {
+  font-family: var(--gothic);
+  font-size: 21px;
+  line-height: 1.02;
+}
+
+.sub {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--smoke);
+  margin-top: 2px;
+}
+
+.right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .masthead {
+    padding: 16px 32px;
+  }
+
+  .name {
+    font-size: 26px;
+  }
+
+  .seal {
+    width: 48px;
+    height: 48px;
+    font-size: 25px;
+  }
+}

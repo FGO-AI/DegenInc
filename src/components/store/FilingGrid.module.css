@@ -1,0 +1,90 @@
+/* 1px gaps over an ash background draw the dividing rules between slots. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--ash);
+  border: 1px solid var(--ash);
+}
+
+@media (min-width: 820px) {
+  .grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.slot {
+  background: var(--void);
+  padding: 10px;
+  transition:
+    background var(--press),
+    color var(--press);
+  display: block;
+  width: 100%;
+}
+
+/* Where the product shot will go. Diagonal hatch = no asset yet. */
+.frame {
+  aspect-ratio: 4 / 5;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 9px,
+    rgba(255, 255, 255, 0.05) 9px 18px
+  );
+}
+
+/* Overrides the solid border the global `rough` utility draws. */
+.slot .frame::before {
+  border-style: dashed;
+}
+
+.frame span {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  padding: 0 8px;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 11px;
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.price {
+  color: var(--smoke);
+}
+
+/* :active is included so the invert also fires on touch, where :hover sticks. */
+.slot:hover,
+.slot:active {
+  background: var(--paper);
+  color: #000;
+}
+
+.slot:hover .frame::before,
+.slot:active .frame::before {
+  border-color: #000;
+}
+
+.slot:hover .frame span,
+.slot:hover .price,
+.slot:active .frame span,
+.slot:active .price {
+  color: #000;
+}
+
+.overflow {
+  margin-top: 14px;
+}

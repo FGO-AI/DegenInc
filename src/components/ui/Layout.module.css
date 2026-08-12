@@ -1,0 +1,67 @@
+.section {
+  padding: 54px 16px;
+  border-bottom: 1px solid var(--ash);
+  background: var(--ink);
+}
+
+/* Lets the dither field show through. */
+.clear {
+  background: transparent;
+}
+
+.coal {
+  background: var(--coal);
+}
+
+@media (min-width: 900px) {
+  .section {
+    padding: 88px 32px;
+  }
+}
+
+.wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+/* Rule with a label at each end — the filing header, the record preview header. */
+.eyebrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 26px;
+  border-bottom: 1px solid var(--iron);
+}
+
+.cols {
+  display: grid;
+  gap: 26px;
+}
+
+@media (min-width: 900px) {
+  .cols {
+    grid-template-columns: 1fr 1fr;
+    gap: 44px;
+  }
+}
+
+.prose p {
+  max-width: 56ch;
+  margin-bottom: 14px;
+  color: var(--smoke);
+  font-size: 16px;
+}
+
+.prose p strong {
+  color: var(--paper);
+  font-weight: 500;
+}
+
+.prose h2 {
+  font-family: var(--gothic);
+  font-size: clamp(40px, 10vw, 76px);
+  line-height: 0.94;
+  margin-bottom: 20px;
+  color: var(--paper);
+}

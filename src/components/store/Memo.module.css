@@ -1,0 +1,87 @@
+/* Photocopied internal memo: bone paper, horizontal scan ruling, a VOID stamp
+   knocked off-axis, and the whole thing run through the #tear filter. */
+.memo {
+  background: var(--bone);
+  color: #000;
+  padding: 26px 20px;
+  position: relative;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.055) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.rule {
+  border-top: 1px solid #000;
+  margin: 13px 0;
+}
+
+.memo h2 {
+  font-family: var(--gothic);
+  font-size: clamp(34px, 8vw, 58px);
+  line-height: 1;
+  color: #0a0a0a;
+}
+
+/* Label-left, value-right. dt/dd are direct grid children. */
+.memo dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.memo dt {
+  color: #4a4a4a;
+}
+
+.memo p {
+  max-width: 62ch;
+  margin-top: 16px;
+  font-size: 16px;
+  color: #111;
+}
+
+.sig {
+  margin-top: 26px;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #4a4a4a;
+}
+
+.kicker {
+  color: #4a4a4a;
+}
+
+.stamp {
+  position: absolute;
+  top: 16px;
+  right: -10px;
+  transform: rotate(9deg);
+  border: 3px solid #000;
+  color: #000;
+  padding: 4px 14px 7px;
+  font-family: var(--gothic);
+  font-size: 22px;
+  opacity: 0.62;
+  filter: url(#rough);
+}
+
+@media (min-width: 900px) {
+  .memo {
+    padding: 44px 40px;
+  }
+
+  .stamp {
+    font-size: 34px;
+    right: 38px;
+    top: 34px;
+  }
+}

@@ -1,0 +1,24 @@
+.empty {
+  padding: 36px 20px;
+  text-align: center;
+  background: var(--void);
+}
+
+.empty h3 {
+  font-family: var(--gothic);
+  font-size: clamp(28px, 7vw, 44px);
+  line-height: 1;
+}
+
+.empty p {
+  max-width: 44ch;
+  margin: 12px auto 0;
+  color: var(--smoke);
+  font-size: 15px;
+}
+
+/* Keeps a full-width button from stretching across the whole empty slab. */
+.action {
+  max-width: 320px;
+  margin: 22px auto 0;
+}

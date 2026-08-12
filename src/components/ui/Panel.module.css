@@ -1,0 +1,25 @@
+/* Bordered card that holds a form. Pair with the global `rough` utility. */
+.panel {
+  padding: 24px 20px;
+  background: var(--void);
+}
+
+@media (min-width: 900px) {
+  .panel {
+    padding: 34px;
+  }
+}
+
+.panel h2 {
+  font-family: var(--gothic);
+  font-size: clamp(34px, 8vw, 50px);
+  line-height: 0.98;
+  margin-bottom: 8px;
+}
+
+.sub {
+  font-size: 15px;
+  color: var(--smoke);
+  margin-bottom: 24px;
+  max-width: 46ch;
+}

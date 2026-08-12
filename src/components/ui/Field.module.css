@@ -1,0 +1,49 @@
+.field {
+  margin-bottom: 18px;
+}
+
+.field label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  margin-bottom: 7px;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  background: var(--coal);
+  color: var(--paper);
+  border: 1px solid var(--iron);
+  padding: 13px 12px;
+  font-family: var(--mono);
+  font-size: 14px;
+  /* iOS rounds inputs by default; nothing in this design is rounded. */
+  border-radius: 0;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: var(--paper);
+  outline: none;
+}
+
+.hint {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--smoke);
+}
+
+/* The "or" divider between sign-in and create-account. */
+.split {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  margin: 18px 0;
+}

@@ -1,0 +1,37 @@
+/* The square-ish bordered control in the masthead and drawer header.
+   min-width/height 44px keeps it at the minimum comfortable tap target even
+   when the label is a single character. */
+.iconbtn {
+  min-width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--iron);
+  font-family: var(--mono);
+  font-size: 11px;
+  flex: none;
+  padding: 0 10px;
+  transition:
+    background var(--press),
+    color var(--press);
+}
+
+.iconbtn:hover {
+  background: var(--paper);
+  color: #000;
+  border-color: var(--paper);
+}
+
+/* Three stacked rules. `currentColor` so it inverts with the button on hover. */
+.burger {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 20px;
+}
+
+.burger i {
+  display: block;
+  height: 2px;
+  background: currentColor;
+}

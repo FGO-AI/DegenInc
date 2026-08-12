@@ -1,0 +1,19 @@
+/* Fills the viewport below the masthead. dvh so mobile browser chrome
+   collapsing doesn't leave a gap; vh first as the fallback. */
+.holding {
+  min-height: calc(100vh - var(--masthead));
+  min-height: calc(100dvh - var(--masthead));
+  display: grid;
+  place-items: center;
+  background: transparent;
+  padding: 60px 20px;
+}
+
+.holding h1 {
+  font-family: var(--gothic);
+  font-size: clamp(46px, 14vw, 124px);
+  line-height: 0.98;
+  text-align: center;
+  filter: url(#grime);
+  text-shadow: 0 0 44px rgba(0, 0, 0, 0.96);
+}

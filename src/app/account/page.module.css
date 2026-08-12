@@ -1,0 +1,4 @@
+/* Gap between the certificate and the order history below it. */
+.cert {
+  margin-bottom: 26px;
+}

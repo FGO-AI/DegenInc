@@ -1,0 +1,70 @@
+/* Full-bleed by default: solid paper block that inverts to an outline on hover. */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 15px;
+  text-align: center;
+  border: 1px solid var(--paper);
+  background: var(--paper);
+  color: #000;
+  font-family: var(--head);
+  font-weight: 900;
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition:
+    background var(--press),
+    color var(--press);
+}
+
+.btn:hover,
+.btn:active {
+  background: transparent;
+  color: var(--paper);
+}
+
+/* Starts as the outline and fills in — the inverse of the solid button. */
+.ghost {
+  background: transparent;
+  color: var(--paper);
+  border-color: var(--iron);
+}
+
+.ghost:hover,
+.ghost:active {
+  background: var(--paper);
+  color: #000;
+  border-color: var(--paper);
+}
+
+/* Shrink-wrapped, for toolbars. */
+.compact {
+  width: auto;
+  padding: 11px 20px;
+  font-size: 15px;
+}
+
+/* Underlined monospace "back" affordance. */
+.backlink {
+  display: inline-block;
+  width: auto;
+  margin-top: 22px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  border-bottom: 1px solid var(--iron);
+  padding-bottom: 2px;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  text-align: left;
+}
+
+.backlink:hover {
+  color: var(--paper);
+  border-color: var(--paper);
+  background: none;
+}

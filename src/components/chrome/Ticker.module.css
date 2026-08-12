@@ -1,0 +1,30 @@
+.ticker {
+  overflow: hidden;
+  background: var(--paper);
+  color: #000;
+  padding: 6px 0;
+}
+
+/* The run holds the phrase list twice. Translating -50% lands the second copy
+   exactly where the first started, so the loop is seamless. */
+.run {
+  display: flex;
+  width: max-content;
+  animation: run 28s linear infinite;
+}
+
+.run span {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding-right: 40px;
+  white-space: nowrap;
+}
+
+@keyframes run {
+  to {
+    transform: translateX(-50%);
+  }
+}

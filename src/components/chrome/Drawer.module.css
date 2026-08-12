@@ -1,0 +1,149 @@
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  visibility: hidden;
+}
+
+.drawer.open {
+  visibility: visible;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+  border: none;
+  width: 100%;
+  cursor: default;
+}
+
+.drawer.open .scrim {
+  opacity: 1;
+}
+
+.panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(88vw, 392px);
+  background: var(--void);
+  display: flex;
+  flex-direction: column;
+  /* 101% so the roughed border edge clears the viewport too. */
+  transform: translateX(-101%);
+  transition: transform 180ms ease-out;
+  overflow-y: auto;
+  border-right: 1px solid var(--iron);
+}
+
+.drawer.open .panel {
+  transform: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--ash);
+  position: sticky;
+  top: 0;
+  background: var(--void);
+  z-index: 2;
+}
+
+.head .title {
+  font-family: var(--gothic);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.body {
+  padding: 6px 16px 0;
+  flex: 1;
+}
+
+.group {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ash);
+}
+
+.group .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  margin-bottom: 10px;
+}
+
+.group a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 21px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 7px 0;
+  color: var(--paper);
+  transition: color var(--press);
+}
+
+.group a:hover {
+  color: var(--smoke);
+}
+
+/* Two-up column for the Men / Women pair. */
+.split2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+}
+
+.split2 .label {
+  grid-column: 1 / -1;
+}
+
+/* Pinned to the bottom of the panel. */
+.staff {
+  margin-top: auto;
+  padding: 18px 16px 24px;
+  border-top: 1px solid var(--iron);
+  background: var(--coal);
+}
+
+.staff p {
+  font-family: var(--gothic);
+  font-size: 20px;
+  line-height: 1.1;
+  color: var(--bone);
+  margin-bottom: 8px;
+}
+
+.staff a {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  border-bottom: 1px solid var(--iron);
+  padding-bottom: 2px;
+  transition:
+    color var(--press),
+    border-color var(--press);
+}
+
+.staff a:hover {
+  color: var(--paper);
+  border-color: var(--paper);
+}

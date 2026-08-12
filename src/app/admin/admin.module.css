@@ -1,0 +1,157 @@
+/* The sign-in gate is a single narrow column. */
+.gate {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--ink);
+  position: relative;
+  z-index: 2;
+}
+
+@media (min-width: 900px) {
+  .shell {
+    grid-template-columns: 242px 1fr;
+    min-height: 70vh;
+  }
+}
+
+/* --- sidebar --- */
+
+.side {
+  border-bottom: 1px solid var(--iron);
+  padding: 18px 16px;
+  background: var(--void);
+}
+
+@media (min-width: 900px) {
+  .side {
+    border-bottom: none;
+    border-right: 1px solid var(--iron);
+    padding: 26px 20px;
+  }
+}
+
+.who {
+  padding-bottom: 15px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--ash);
+}
+
+.who strong {
+  display: block;
+  font-family: var(--gothic);
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+/* Horizontal scrolling tab strip on mobile, stacked list on desktop. */
+.sidenav {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+@media (min-width: 900px) {
+  .sidenav {
+    flex-direction: column;
+    overflow: visible;
+  }
+}
+
+.sidenav button {
+  padding: 10px 13px;
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition:
+    background var(--press),
+    color var(--press);
+}
+
+.sidenav button[aria-selected="true"] {
+  background: var(--paper);
+  color: #000;
+}
+
+.sidenav button:hover:not([aria-selected="true"]) {
+  border-color: var(--iron);
+  color: var(--paper);
+}
+
+/* --- work area --- */
+
+.work {
+  padding: 24px 16px;
+}
+
+@media (min-width: 900px) {
+  .work {
+    padding: 34px;
+  }
+}
+
+.work h2 {
+  font-family: var(--gothic);
+  font-size: clamp(34px, 8vw, 48px);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.note {
+  color: var(--smoke);
+  font-size: 15px;
+  margin-bottom: 24px;
+  max-width: 56ch;
+}
+
+.toolrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+/* --- tables --- */
+
+/* min-width on the table plus overflow here means narrow screens scroll the
+   table sideways instead of crushing the columns. */
+.tablewrap {
+  overflow-x: auto;
+  background: var(--void);
+}
+
+.tablewrap table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.tablewrap th {
+  text-align: left;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  border-bottom: 1px solid var(--iron);
+  white-space: nowrap;
+}
+
+.tablewrap td {
+  padding: 38px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--smoke);
+  text-align: center;
+}
