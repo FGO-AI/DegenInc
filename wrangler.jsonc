@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "degen-inc",
+
+  // Entry point emitted by `opennextjs-cloudflare build`. Do not point this at
+  // src/ — the adapter compiles the Next build into this worker.
+  "main": ".open-next/worker.js",
+
+  // Matches the workerd bundled with the installed wrangler. A date newer than
+  // the local runtime is rejected, so bump this and wrangler together.
+  "compatibility_date": "2026-08-11",
+
+  // nodejs_compat is mandatory: Next's server code uses Node built-ins.
+  // global_fetch_strictly_public makes fetch() to our own hostname go out over
+  // the public internet instead of looping back inside the worker, which is
+  // what Next expects when it fetches its own routes.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  // Static output (/_next/static, public/) served straight from the CDN
+  // rather than through the worker.
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+
+  // Not configured yet, deliberately — see README "Cloudflare deployment":
+  //   images        — no next/image usage in the app today
+  //   r2_buckets    — product image bucket + incremental cache
+  //   services      — WORKER_SELF_REFERENCE, only needed with the R2 cache
+}

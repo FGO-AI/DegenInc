@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cloudflare adapter output. `.open-next/` is the bundled Next server and
+    // `cloudflare-env.d.ts` is emitted by `wrangler types`; linting either
+    // reports tens of thousands of problems in code we do not author.
+    ".open-next/**",
+    ".wrangler/**",
+    "cloudflare-env.d.ts",
   ]),
 ]);
 

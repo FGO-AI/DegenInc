@@ -1,0 +1,21 @@
+# Copy to .dev.vars for local `wrangler dev` / `npm run preview`.
+# .dev.vars is gitignored. These are runtime secrets: they are read on the
+# server per request and are never inlined into the client bundle.
+#
+# In production set each one with:
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#
+# None of these are read by any code yet — see README "Wiring the backend".
+
+# Bypasses Row Level Security entirely. Server-side admin paths only.
+# Never give this a NEXT_PUBLIC_ prefix.
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Stripe. On Workers, initialize with Stripe.createFetchHttpClient() and verify
+# webhooks with constructEventAsync + createSubtleCryptoProvider().
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+# Turnstile server-side verification for the open call form.
+# The matching site key is public and goes in the build env instead.
+TURNSTILE_SECRET_KEY=
