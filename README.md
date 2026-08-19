@@ -9,20 +9,23 @@ Next.js with the visual language kept intact.
 
 ## Status
 
-**Front end only.** Every screen is built and routable, but there is no backend
-behind any of it: no products, no carts, no accounts, no orders. Forms validate
-and then tell you they aren't connected. See [Wiring the backend](#wiring-the-backend).
+Front end complete and routable. The data layer runs on **Cloudflare D1** with
+Drizzle: the filing grid reads live products, stock, and status from the
+database. Auth, cart, checkout, and payments are not built yet — see
+[Wiring the backend](#wiring-the-backend).
 
-> **The `/admin` gate is not real.** Submitting the staff sign-in form reveals
-> the console to anyone who clicks it. Nothing behind it reads or writes real
-> data, and nothing should until Supabase auth plus a staff-role check are in
-> place.
+> **The `/admin` gate is not real yet.** Submitting the staff sign-in form
+> reveals the console to anyone who clicks it. Nothing behind it reads or writes
+> real data, and nothing should until the server-side session and staff-role
+> check are in place.
 
 ## Running it
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
+npm run db:migrate   # create the local D1 database
+npm run db:seed      # optional: a live Filing 001 with stock
+npm run dev          # http://localhost:3000
 ```
 
 ```bash
@@ -31,12 +34,60 @@ npm start          # serve the build
 npm run lint
 ```
 
+## Data layer
+
+**Cloudflare D1** (SQLite) via **Drizzle ORM**, bound to the worker as `DB`.
+
+```bash
+npm run db:generate       # schema.ts -> migrations/*.sql
+npm run db:migrate        # apply to local D1
+npm run db:seed           # local fixtures
+npm run db:migrate:remote # apply to the real database
+```
+
+### There is no Row Level Security, and that changes the architecture
+
+This is the single most important thing to understand before adding a query.
+
+Postgres RLS meant the *database* refused to return rows the caller shouldn't
+see. A query leaked from the browser was still safe, which is why a public anon
+key was tolerable.
+
+**D1 has no equivalent.** It returns whatever it is asked for. So:
+
+- The client never touches the database. There is no public database endpoint
+  and no public credential, because none exists to leak.
+- Every read and write goes through `src/lib/db/queries.ts`, which is
+  `server-only` — importing it from a Client Component is a build error.
+- Authorization is application code that you can forget to write. Every
+  function handling member or staff data calls a guard first; the genuinely
+  public ones say so in a comment, so "no guard" is always a decision.
+
+### D1 constraints worth knowing before you write a query
+
+- **No interactive transactions.** `db.transaction(async tx => …)` throws.
+  Multi-statement writes use `db.batch([...])`, which is atomic but cannot
+  branch — you cannot read a value mid-batch and decide what to do next.
+- **Use constraints to fail a batch, not conditions.** A conditional
+  `UPDATE … WHERE stock >= ?` that matches nothing does *not* error; it changes
+  zero rows and the batch commits, and you have sold a shirt you do not have.
+  So `variants.stock` carries `CHECK (stock >= 0)` and checkout decrements
+  unconditionally. Going negative violates the constraint, the statement
+  errors, and D1 rolls the whole batch back.
+- **No sequences.** Certificate numbers come from the `counters` table,
+  incremented with `UPDATE … SET value = value + 1 … RETURNING value` inside
+  the same batch as the insert that consumes it. Numbers are never reused.
+- **No Postgres types.** No `uuid`, `timestamptz`, or `jsonb`. Ids are `text`
+  from `crypto.randomUUID()`, times are integer Unix milliseconds, addresses
+  are `text` holding JSON, money is integer cents.
+- **Read replicas can serve stale reads.** Fine for showing stock on a product
+  page. Not fine for the checkout write path, which must rely on the constraint
+  rather than a number it read a moment ago.
+
 ## Cloudflare deployment
 
 Hosted on **Cloudflare Workers** via the [OpenNext](https://opennext.js.org/cloudflare)
-adapter. Supabase stays the database and auth provider — the RLS policies are
-the security model and only Postgres can enforce them, so the data layer does
-not move to D1.
+adapter.
 
 ```bash
 npm run preview     # build + serve through the real Workers runtime (:8787)
@@ -44,39 +95,38 @@ npm run deploy      # build + push to Workers
 npm run cf-typegen  # regenerate cloudflare-env.d.ts after editing wrangler.jsonc
 ```
 
-`npm run dev` still runs the plain Next dev server and is faster for day-to-day
-work. Use `preview` when you need to test what actually ships.
+`npm run dev` runs the plain Next dev server and is faster for day-to-day work.
+`next.config.ts` calls `initOpenNextCloudflareForDev()` so `env.DB` resolves
+there too — without it every query fails with an opaque error. In server code,
+reach bindings with `getCloudflareContext()`; never import `env` from
+`cloudflare:workers`.
 
 ### Configuration
 
-- `wrangler.jsonc` — worker name, entry (`.open-next/worker.js`), assets binding.
+- `wrangler.jsonc` — worker name, entry, assets, and the `DB` binding.
   `compatibility_date` tracks the workerd bundled with wrangler; a date newer
-  than the installed runtime is rejected, so bump both together.
-  `nodejs_compat` is mandatory — Next's server code uses Node built-ins.
-- `open-next.config.ts` — deliberately bare. No incremental cache override,
-  because every route is statically prerendered today and there is no ISR or
-  `use cache` for one to store.
+  than the installed runtime is rejected, so bump both together. `nodejs_compat`
+  is mandatory.
+  **`database_id` is a placeholder** until someone with a Cloudflare login runs
+  `npx wrangler d1 create degen-inc` and pastes the real id. Local development
+  ignores it; every remote command needs it.
+- `open-next.config.ts` — deliberately bare.
 
 ### Environment variables
-
-The split matters and is easy to get wrong:
 
 | | Where | Why |
 | --- | --- | --- |
 | `NEXT_PUBLIC_*` | **build** environment (`.env.local`, or Workers Builds variables) | Inlined into the client bundle at build time. `wrangler secret put` does nothing for these — the bundle is already compiled. |
 | everything secret | `.dev.vars` locally, `wrangler secret put` in prod | Read per request, never inlined. |
 
-`.dev.vars` is gitignored; `.dev.vars.example` documents the keys. **Never give
-the service role key a `NEXT_PUBLIC_` prefix** — it bypasses RLS and would ship
-to every visitor.
+`.dev.vars` is gitignored; `.dev.vars.example` documents the keys. The database
+needs no credential at all — it is a binding, not a connection string.
 
 ### Not configured yet
 
-Intentionally deferred until the plain deploy is proven:
-
-- **R2** for product images, and the R2 incremental cache.
-- **Cloudflare Images** for `next/image`. There are currently zero `next/image`
-  usages, so nothing is broken; configure the `images` binding *or* set
+- **R2** for product images (`product_images.r2_key` already holds object keys).
+- **Cloudflare Images** for `next/image`. Zero `next/image` usages today, so
+  nothing is broken; configure the `images` binding *or* set
   `images.unoptimized` before adding the first one.
 - **Turnstile** on the open call form — required before `submissions` accepts
   public writes.
@@ -89,13 +139,13 @@ Intentionally deferred until the plain deploy is proven:
 
 ### Constraints
 
-- **Node.js runtime only.** Never add `export const runtime = "edge"`; the
-  adapter targets the Node runtime and edge restricts APIs this app needs.
+- **Node.js runtime only.** Never add `export const runtime = "edge"`.
 - **No direct Postgres driver** (`pg`, `postgres.js`, Drizzle over TCP).
-  Workers cannot open raw TCP without Hyperdrive. `@supabase/supabase-js`
-  speaks HTTP, which is why it is the client here.
-- **Bundle budget**: 3 MiB gzipped on the free plan. Currently ~1.0 MiB.
-  Check with `npx wrangler deploy --dry-run --outdir=.wrangler/dryrun`.
+  Workers cannot open raw TCP without Hyperdrive. D1 is a binding, so this
+  does not arise — but it is why the data layer is D1 rather than a hosted
+  Postgres.
+- **Bundle budget**: 3 MiB gzipped on the free plan. Check with
+  `npx wrangler deploy --dry-run --outdir=.wrangler/dryrun`.
 
 ## Routes
 
@@ -109,6 +159,8 @@ Intentionally deferred until the plain deploy is proven:
 ## Layout
 
 ```
+migrations/                 generated SQL, applied by wrangler
+scripts/seed.sql            local fixtures
 src/
   app/
     layout.tsx              fonts, ambient layer, drawer provider
@@ -129,7 +181,10 @@ src/
       Button, Field, Panel, Certificate, EmptyState, IconButton, Layout
   lib/
     fonts.ts                next/font declarations
-    supabase/client.ts      browser client, null until configured
+    db/
+      schema.ts             Drizzle table definitions
+      index.ts              server-only D1 handle
+      queries.ts            server-only data access layer
 ```
 
 ## Styling
@@ -159,23 +214,25 @@ a blurry gradient. It pauses on tab hide and renders a single static frame under
 
 ## Wiring the backend
 
-Nothing below is built yet. In rough dependency order:
+Done:
 
-1. **Create a Supabase project**, then `cp .env.example .env.local` and fill in
-   the URL and publishable (anon) key. `getSupabase()` returns `null` until both
-   are set, so the app keeps running unconfigured.
-2. **Schema.** Tables the interface already implies: `products`, `filings`
-   (a filing is one drop), `filing_products`, `members`, `certificates`
-   (numbered in order, non-transferable, never reused), `orders`, `order_items`,
-   `submissions`, and `votes` (one per member per filing).
-3. **Row Level Security on every table**, before any real data goes in. Members
-   read only their own orders and certificates; staff-only tables check a role
-   claim. RLS is the actual security boundary — the anon key is public.
-4. **Auth** in `SignInPanel`, replacing the stub submit handler.
-5. **A real admin gate.** Server-side session check plus a staff role, so the
-   console is never reachable by clicking a button. Today it is.
-6. **The open-call form** writes to `submissions` (`OpenCall.tsx`).
-7. **Cart and checkout.** The bag counter in the masthead is hardcoded to `0`.
+1. **D1 + Drizzle.** Schema in `src/lib/db/schema.ts`, migrations in
+   `migrations/`, server-only access in `src/lib/db/queries.ts`. The filing grid
+   reads it.
+
+Still to build, in dependency order:
+
+2. **Auth** (Better Auth, Drizzle D1 adapter, email + password). Sessions in D1.
+   Replaces the stub handler in `SignInPanel`.
+3. **The guard module** — `getSession()`, `requireMember()`, `requireStaff()` —
+   called first by every non-public data function.
+4. **A real admin gate.** Server-side check in the `/admin` layout that
+   *redirects*, decided on the server. Today `AdminConsole` just flips a
+   `useState`.
+5. **The open-call form** writes to `submissions`, behind Turnstile.
+6. **Cart and checkout.** The bag counter in the masthead is hardcoded to `0`.
+   Checkout decrements stock in a `db.batch()` and leans on
+   `variants_stock_non_negative`.
 
 ## Credits
 

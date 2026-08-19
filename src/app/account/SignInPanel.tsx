@@ -9,8 +9,8 @@ import styles from "./SignInPanel.module.css";
 /**
  * Member sign-in.
  *
- * Form only — no auth behind it yet. Wiring it up means calling
- * `supabase.auth.signInWithOtp` / `signInWithPassword`; see the README.
+ * Form only — no auth behind it yet. Wiring it up means calling Better Auth's
+ * `signIn.email` / `signUp.email`; see the README.
  */
 export function SignInPanel() {
   const [status, setStatus] = useState("");

@@ -1,15 +1,15 @@
 # Copy to .dev.vars for local `wrangler dev` / `npm run preview`.
-# .dev.vars is gitignored. These are runtime secrets: they are read on the
-# server per request and are never inlined into the client bundle.
+# .dev.vars is gitignored. These are runtime secrets: read on the server per
+# request, never inlined into the client bundle.
 #
 # In production set each one with:
-#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put BETTER_AUTH_SECRET
 #
-# None of these are read by any code yet — see README "Wiring the backend".
+# Note there is no database credential here. D1 is a binding declared in
+# wrangler.jsonc, so there is no connection string and no public endpoint.
 
-# Bypasses Row Level Security entirely. Server-side admin paths only.
-# Never give this a NEXT_PUBLIC_ prefix.
-SUPABASE_SERVICE_ROLE_KEY=
+# Signs session cookies. Generate with: openssl rand -base64 32
+BETTER_AUTH_SECRET=
 
 # Stripe. On Workers, initialize with Stripe.createFetchHttpClient() and verify
 # webhooks with constructEventAsync + createSubtleCryptoProvider().

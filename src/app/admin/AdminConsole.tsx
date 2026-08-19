@@ -24,7 +24,7 @@ type PaneId = (typeof PANES)[number]["id"];
 export function AdminConsole() {
   // NOTE: presentation state only. There is no auth here — clicking Sign in
   // reveals the console to anybody. Nothing behind it touches real data, and
-  // it must not until Supabase auth + a staff-role check are wired up.
+  // it must not until a server-side session + staff-role check are wired up.
   // See "Wiring the backend" in the README.
   const [signedIn, setSignedIn] = useState(false);
   const [pane, setPane] = useState<PaneId>("orders");

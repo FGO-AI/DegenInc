@@ -21,10 +21,30 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
-  }
+  },
 
-  // Not configured yet, deliberately — see README "Cloudflare deployment":
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "degen-inc",
+
+      // PLACEHOLDER. Local development ignores this value entirely — miniflare
+      // keys its SQLite file off database_name — but every remote command
+      // (`--remote`, `deploy`) needs the real id.
+      //
+      //   npx wrangler d1 create degen-inc
+      //
+      // then paste the printed database_id here. Requires a Cloudflare login.
+      "database_id": "REPLACE_WITH_ID_FROM_WRANGLER_D1_CREATE",
+
+      // Plain .sql files applied by `wrangler d1 migrations apply`.
+      // drizzle-kit generates into this same directory.
+      "migrations_dir": "migrations"
+    }
+  ]
+
+  // Not configured yet — see README "Cloudflare deployment":
   //   images        — no next/image usage in the app today
-  //   r2_buckets    — product image bucket + incremental cache
-  //   services      — WORKER_SELF_REFERENCE, only needed with the R2 cache
+  //   r2_buckets    — product image bucket
+  //   kv_namespaces — optional session store
 }
