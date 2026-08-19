@@ -10,14 +10,15 @@ Next.js with the visual language kept intact.
 ## Status
 
 Front end complete and routable. The data layer runs on **Cloudflare D1** with
-Drizzle: the filing grid reads live products, stock, and status from the
-database. Auth, cart, checkout, and payments are not built yet — see
+Drizzle, and sessions on **Better Auth** (email + password). The filing grid
+reads live products, stock, and status; `/admin` is gated server-side; checkout
+reserves stock atomically. Cart UI and payments are not built — see
 [Wiring the backend](#wiring-the-backend).
 
-> **The `/admin` gate is not real yet.** Submitting the staff sign-in form
-> reveals the console to anyone who clicks it. Nothing behind it reads or writes
-> real data, and nothing should until the server-side session and staff-role
-> check are in place.
+`/admin` is guarded in `src/app/admin/layout.tsx` by `requireStaff()`. Signed
+out redirects to `/account`; signed in without the staff role redirects to `/`.
+The decision is made on the server before any child renders — it does not hide
+the console, it refuses to render it.
 
 ## Running it
 
@@ -220,19 +221,28 @@ Done:
    `migrations/`, server-only access in `src/lib/db/queries.ts`. The filing grid
    reads it.
 
+2. **Auth.** Better Auth 1.7.1 with the Drizzle D1 adapter, email + password,
+   sessions in D1. `src/lib/auth/index.ts` builds it as an async singleton —
+   the binding only exists per request, so it cannot be constructed at module
+   load. That shape is also why `better-auth generate` cannot read it; run
+   `node scripts/auth-schema.mjs` after upgrading to diff the expected tables
+   against `schema.ts`.
+3. **The guard module.** `getSession()` / `requireMember()` / `requireStaff()`
+   in `src/lib/auth/guards.ts`, called first by every non-public data function.
+4. **The admin gate.** `requireStaff()` in the `/admin` layout, redirecting on
+   the server.
+5. **Stock-safe checkout.** `src/lib/db/checkout.ts` reserves stock in one
+   `db.batch()` and relies on `variants_stock_non_negative`. Verified with
+   `scripts/concurrent-checkout.mjs`: five simultaneous buyers against a
+   stock-1 variant produce exactly one order.
+
 Still to build, in dependency order:
 
-2. **Auth** (Better Auth, Drizzle D1 adapter, email + password). Sessions in D1.
-   Replaces the stub handler in `SignInPanel`.
-3. **The guard module** — `getSession()`, `requireMember()`, `requireStaff()` —
-   called first by every non-public data function.
-4. **A real admin gate.** Server-side check in the `/admin` layout that
-   *redirects*, decided on the server. Today `AdminConsole` just flips a
-   `useState`.
-5. **The open-call form** writes to `submissions`, behind Turnstile.
-6. **Cart and checkout.** The bag counter in the masthead is hardcoded to `0`.
-   Checkout decrements stock in a `db.batch()` and leans on
-   `variants_stock_non_negative`.
+6. **Cart UI.** The bag counter in the masthead is hardcoded to `0`; the
+   checkout API exists but nothing in the interface calls it.
+7. **The open-call form** writes to `submissions`, behind Turnstile.
+8. **Stripe**, against the reserved order.
+9. **Email**, then flip `requireEmailVerification` on.
 
 ## Credits
 

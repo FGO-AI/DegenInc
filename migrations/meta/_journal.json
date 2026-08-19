@@ -8,6 +8,13 @@
       "when": 1787163929894,
       "tag": "0000_optimal_kate_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787164664180,
+      "tag": "0001_brief_the_watchers",
+      "breakpoints": true
     }
   ]
 }
