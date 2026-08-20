@@ -124,6 +124,29 @@ real `database_id`**, so it is safe in CI.
 If a build ever fails with those errors, run typegen — do not un-ignore the
 file.
 
+### Nothing that reads a request may be prerendered
+
+Next renders every route at build time to decide whether it can be static.
+That build has no D1 binding and no runtime secrets, so anything touching the
+session or the database must opt out — with `connection()` from `next/server`,
+which resolves only at request time and stops prerendering there.
+
+- `getSession()` calls it before `getAuth()`. Otherwise `getAuth()` throws on
+  the missing `BETTER_AUTH_SECRET` during the build, before `headers()` can
+  signal that the route is dynamic — failing the build on a secret that is,
+  correctly, runtime-only.
+- `getLiveFiling()` calls it before reading D1. Otherwise the storefront is
+  prerendered with no binding, `getLiveFilingSafe()` swallows the error, and
+  the "awaiting asset" placeholders are baked into a static page that serves
+  forever no matter what the database holds.
+
+`/` and `/admin` should both show as `ƒ (Dynamic)` in the build output. If `/`
+ever shows `○ (Static)`, the storefront has been frozen at build time.
+
+Note `export const dynamic` is not the tool here: it is absent from the Next
+16.3 route segment config options and is removed outright under Cache
+Components.
+
 ### Workers Builds
 
 | Setting | Value |

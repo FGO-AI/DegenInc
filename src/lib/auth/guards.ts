@@ -2,6 +2,7 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 import { getAuth } from "./index";
 
@@ -31,8 +32,21 @@ export type SessionUser = {
  * lookup per request rather than hitting D1 twice.
  */
 export const getSession = cache(async (): Promise<SessionUser | null> => {
+  // Stop prerendering BEFORE touching auth.
+  //
+  // Next tries to render every route at build time to see whether it can be
+  // static. headers() would signal "dynamic" and bail out — but getAuth()
+  // used to run first and threw on the missing BETTER_AUTH_SECRET, failing
+  // the build before Next ever got that signal. A runtime secret must not be
+  // required to compile.
+  //
+  // connection() resolves only at request time, so during a build this
+  // function stops here and the route is excluded from prerendering.
+  await connection();
+
+  const requestHeaders = await headers();
   const auth = await getAuth();
-  const result = await auth.api.getSession({ headers: await headers() });
+  const result = await auth.api.getSession({ headers: requestHeaders });
 
   if (!result?.user) return null;
 

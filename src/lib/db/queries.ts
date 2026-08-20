@@ -1,5 +1,6 @@
 import "server-only";
 
+import { connection } from "next/server";
 import { asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./index";
 import { filings, products, variants } from "./schema";
@@ -38,6 +39,15 @@ export type FilingSlot = {
  * stock CHECK constraint rather than on a number it read a moment ago.
  */
 export async function getLiveFiling() {
+  // Excludes the storefront from prerendering.
+  //
+  // Without this the page is rendered at BUILD time, where no D1 binding
+  // exists — getLiveFilingSafe() swallows the failure, and the "awaiting
+  // asset" placeholders get baked into a static page that then serves
+  // forever, whatever the database actually holds. Stock counts have to be
+  // read per request.
+  await connection();
+
   const db = getDb();
 
   const [filing] = await db
