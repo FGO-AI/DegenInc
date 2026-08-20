@@ -91,9 +91,10 @@ Hosted on **Cloudflare Workers** via the [OpenNext](https://opennext.js.org/clou
 adapter.
 
 ```bash
-npm run preview     # build + serve through the real Workers runtime (:8787)
-npm run deploy      # build + push to Workers
-npm run cf-typegen  # regenerate cloudflare-env.d.ts after editing wrangler.jsonc
+npm run build:cf    # typegen + adapter build -> .open-next/worker.js
+npm run preview     # build:cf + serve through the real Workers runtime (:8787)
+npm run deploy      # build:cf + push to Workers
+npm run cf-typegen  # regenerate cloudflare-env.d.ts by hand
 ```
 
 `npm run dev` runs the plain Next dev server and is faster for day-to-day work.
@@ -101,6 +102,43 @@ npm run cf-typegen  # regenerate cloudflare-env.d.ts after editing wrangler.json
 there too — without it every query fails with an opaque error. In server code,
 reach bindings with `getCloudflareContext()`; never import `env` from
 `cloudflare:workers`.
+
+### `cloudflare-env.d.ts` is generated, not committed
+
+`wrangler types` writes `cloudflare-env.d.ts`, which supplies both the
+`CloudflareEnv` interface (with `DB: D1Database`) and the `D1Database` type
+itself. Without it the build dies at the TypeScript step with `Cannot find name
+'D1Database'` and `Property 'DB' does not exist on type 'CloudflareEnv'`.
+
+It stays gitignored: ~15k lines that go stale the moment `wrangler.jsonc`
+changes. Instead it is generated on every build.
+
+- `prebuild` runs `cf-typegen`, and npm runs `prebuild` automatically before
+  `build` — so even a plain `npm run build` generates types first.
+- `build:cf` runs `cf-typegen` explicitly, and `preview` and `deploy` both
+  route through it. No path reaches the compiler without types.
+
+`wrangler types` reads local config only. **It needs no Cloudflare login and no
+real `database_id`**, so it is safe in CI.
+
+If a build ever fails with those errors, run typegen — do not un-ignore the
+file.
+
+### Workers Builds
+
+| Setting | Value |
+| --- | --- |
+| Build command | `npm run build:cf` |
+| Deploy command | `npx wrangler deploy` |
+
+The build command **cannot** be `npm run build`. Plain `next build` produces
+`.next/`, not `.open-next/worker.js`, which is the entry `wrangler.jsonc`
+points at — the deploy would fail on a missing entrypoint. Only
+`opennextjs-cloudflare build` emits the worker.
+
+Build-time variables (`NEXT_PUBLIC_*`) go in Workers Builds → Settings →
+Variables. Runtime secrets do **not**; they belong in Settings → Variables and
+Secrets, or `wrangler secret put`.
 
 ### Configuration
 
