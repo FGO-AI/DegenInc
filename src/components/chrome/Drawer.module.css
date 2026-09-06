@@ -37,6 +37,8 @@
   transform: translateX(-101%);
   transition: transform 180ms ease-out;
   overflow-y: auto;
+  /* Scrolling to the end of the menu must not chain into the page behind it. */
+  overscroll-behavior: contain;
   border-right: 1px solid var(--iron);
 }
 

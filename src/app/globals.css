@@ -61,8 +61,14 @@ body {
   overflow-x: hidden;
 }
 
-/* Set while the drawer is open so the page behind it can't scroll. */
+/* Set while the drawer is open so the page behind it can't scroll.
+   `overflow: hidden` alone does not reliably hold on iOS Safari, and where it
+   does take effect the page jumps to the top. Taking the body out of flow is
+   what actually stops it; DrawerProvider supplies the matching `top` offset
+   and restores the scroll position on close. */
 body.locked {
+  position: fixed;
+  width: 100%;
   overflow: hidden;
 }
 

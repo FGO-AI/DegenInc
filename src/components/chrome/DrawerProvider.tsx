@@ -48,9 +48,28 @@ export function DrawerProvider({ children }: { children: ReactNode }) {
   // navigation at all.
 
   // Lock the page behind the scrim while it's open.
+  //
+  // The offset is the whole point. body.locked takes the body out of flow,
+  // which is the only thing iOS Safari reliably respects — but that alone
+  // snaps the page to the top, so closing the drawer would dump the reader
+  // somewhere else in the document. Pinning `top` to minus the scroll
+  // position holds the view still, and scrolling back to it on close returns
+  // them exactly where they were.
   useEffect(() => {
-    document.body.classList.toggle("locked", open);
-    return () => document.body.classList.remove("locked");
+    if (!open) return;
+
+    const y = window.scrollY;
+    const body = document.body;
+    body.classList.add("locked");
+    body.style.top = `-${y}px`;
+
+    return () => {
+      body.classList.remove("locked");
+      body.style.top = "";
+      // "instant" is load-bearing: html has scroll-behavior: smooth, so a
+      // plain scrollTo would animate the restore and read as jank.
+      window.scrollTo({ top: y, behavior: "instant" });
+    };
   }, [open]);
 
   useEffect(() => {
