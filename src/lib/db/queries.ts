@@ -1,9 +1,18 @@
 import "server-only";
 
 import { connection } from "next/server";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, count, desc, eq, inArray } from "drizzle-orm";
+import { requireMember, type SessionUser } from "@/lib/auth/guards";
 import { getDb } from "./index";
-import { filings, products, variants } from "./schema";
+import {
+  certificates,
+  filings,
+  orderItems,
+  orders,
+  products,
+  variants,
+  votes,
+} from "./schema";
 
 /**
  * Server-only data access layer.
@@ -113,4 +122,140 @@ export async function getLiveFilingSafe() {
   } catch {
     return null;
   }
+}
+
+/* -------------------------------------------------------------------------
+   Member record
+   ------------------------------------------------------------------------- */
+
+/** Orders shown on the record. A member page is not a paginated ledger. */
+const ORDER_LIMIT = 50;
+
+export type MemberOrderLine = {
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+};
+
+export type MemberOrder = {
+  id: string;
+  status: "pending" | "paid" | "fulfilled" | "cancelled" | "refunded";
+  totalCents: number;
+  placedAt: Date;
+  lines: MemberOrderLine[];
+};
+
+/** Null until issuance exists. Nothing writes to `certificates` yet. */
+export type MemberCertificate = {
+  number: number;
+  class: string;
+  issuedAt: Date;
+} | null;
+
+export type MemberRecord = {
+  user: SessionUser;
+  certificate: MemberCertificate;
+  orders: MemberOrder[];
+  votesCast: number;
+};
+
+/**
+ * Everything /account renders for the signed-in member.
+ *
+ * GUARDED. requireMember() runs first and the user id comes from the verified
+ * session — never from a parameter, because there is no parameter. Under RLS a
+ * leaked id was survivable; here it would just hand back someone else's orders.
+ *
+ * Note the projections are explicit rather than a select(). Whatever a server
+ * component returns is serialised into the RSC payload and shipped to the
+ * browser, and select() on `orders` would put stripePaymentIntentId and the
+ * shippingAddress JSON in there. Neither is rendered; neither should leave the
+ * worker.
+ *
+ * Two round trips, not four: the first three reads are independent, so they go
+ * in one db.batch(). Line items need the order ids, so they follow. A batch
+ * also runs against the primary rather than a read replica, which is what we
+ * want anyway — a member who just checked out must see their own order.
+ */
+export async function getMemberRecord(): Promise<MemberRecord> {
+  // Guard before any query, per the rule at the top of this file. This also
+  // calls connection() transitively, so the route stays out of the prerender.
+  const me = await requireMember();
+
+  const db = getDb();
+
+  const [certRows, orderRows, voteRows] = await db.batch([
+    // certificates.userId is UNIQUE — at most one per member, forever.
+    db
+      .select({
+        number: certificates.number,
+        class: certificates.class,
+        issuedAt: certificates.issuedAt,
+      })
+      .from(certificates)
+      .where(eq(certificates.userId, me.id))
+      .limit(1),
+
+    // `currency` is deliberately not selected. money() hardcodes $ and en-US,
+    // so carrying a currency column we then ignore is how a euro amount ends
+    // up printed with a dollar sign.
+    db
+      .select({
+        id: orders.id,
+        status: orders.status,
+        totalCents: orders.totalCents,
+        placedAt: orders.createdAt,
+      })
+      .from(orders)
+      .where(eq(orders.userId, me.id))
+      .orderBy(desc(orders.createdAt))
+      .limit(ORDER_LIMIT),
+
+    db.select({ n: count() }).from(votes).where(eq(votes.userId, me.id)),
+  ]);
+
+  // One extra query rather than N, same shape as getLiveFiling above. Skipped
+  // entirely when there is nothing to look up — inArray over an empty list is
+  // a query with no useful answer.
+  const lineRows = orderRows.length
+    ? await db
+        .select({
+          orderId: orderItems.orderId,
+          name: orderItems.nameSnapshot,
+          quantity: orderItems.quantity,
+          unitPriceCents: orderItems.unitPriceCents,
+        })
+        .from(orderItems)
+        .where(
+          inArray(
+            orderItems.orderId,
+            orderRows.map((o) => o.id),
+          ),
+        )
+        // Otherwise SQLite returns rowid order, which is insertion order and
+        // therefore an implementation detail.
+        .orderBy(asc(orderItems.nameSnapshot))
+    : [];
+
+  const linesByOrder = new Map<string, MemberOrderLine[]>();
+  for (const row of lineRows) {
+    const line = {
+      name: row.name,
+      quantity: row.quantity,
+      unitPriceCents: row.unitPriceCents,
+    };
+    const list = linesByOrder.get(row.orderId);
+    if (list) list.push(line);
+    else linesByOrder.set(row.orderId, [line]);
+  }
+
+  return {
+    user: me,
+    certificate: certRows[0] ?? null,
+    orders: orderRows.map((o) => ({
+      ...o,
+      lines: linesByOrder.get(o.id) ?? [],
+    })),
+    votesCast: voteRows[0]?.n ?? 0,
+  };
 }
