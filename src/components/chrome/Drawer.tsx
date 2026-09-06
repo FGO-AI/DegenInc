@@ -23,25 +23,28 @@ const FOCUSABLE =
  * A drawer link. It closes the drawer from its own click rather than from a
  * route-change effect, so links pointing at the route you're already on still
  * dismiss it.
+ *
+ * `onNavigate`, not `onClose`: this path deliberately does not restore focus,
+ * because the page underneath is being replaced.
  */
 function NavLink({
   href,
-  onClose,
+  onNavigate,
   children,
 }: {
   href: string;
-  onClose: () => void;
+  onNavigate: () => void;
   children: ReactNode;
 }) {
   return (
-    <Link href={href} onClick={onClose}>
+    <Link href={href} onClick={onNavigate}>
       {children}
     </Link>
   );
 }
 
 export function Drawer() {
-  const { open, closeDrawer } = useDrawer();
+  const { open, closeDrawer, dismissDrawer } = useDrawer();
   const panelRef = useRef<HTMLElement>(null);
 
   // Move focus into the panel on open, and keep Tab inside it while it's up.
@@ -92,7 +95,7 @@ export function Drawer() {
       <button
         type="button"
         className={styles.scrim}
-        onClick={closeDrawer}
+        onClick={dismissDrawer}
         tabIndex={-1}
         aria-hidden="true"
       />
@@ -106,7 +109,7 @@ export function Drawer() {
       >
         <div className={styles.head}>
           <span className={styles.title}>Menu</span>
-          <IconButton onClick={closeDrawer} aria-label="Close menu">
+          <IconButton onClick={dismissDrawer} aria-label="Close menu">
             Close
           </IconButton>
         </div>
@@ -114,10 +117,10 @@ export function Drawer() {
         <div className={styles.body}>
           <div className={`${styles.group} ${styles.split2}`}>
             <div className={styles.label}>Shop by</div>
-            <NavLink href="/soon" onClose={closeDrawer}>
+            <NavLink href="/soon" onNavigate={closeDrawer}>
               Men
             </NavLink>
-            <NavLink href="/soon" onClose={closeDrawer}>
+            <NavLink href="/soon" onNavigate={closeDrawer}>
               Women
             </NavLink>
           </div>
@@ -125,7 +128,7 @@ export function Drawer() {
           <div className={styles.group}>
             <div className={styles.label}>Categories</div>
             {CATEGORIES.map((c) => (
-              <NavLink key={c} href="/soon" onClose={closeDrawer}>
+              <NavLink key={c} href="/soon" onNavigate={closeDrawer}>
                 {c}
               </NavLink>
             ))}
@@ -134,7 +137,7 @@ export function Drawer() {
           <div className={styles.group}>
             <div className={styles.label}>The house</div>
             {HOUSE.map((item) => (
-              <NavLink key={item.label} href={item.href} onClose={closeDrawer}>
+              <NavLink key={item.label} href={item.href} onNavigate={closeDrawer}>
                 {item.label}
               </NavLink>
             ))}
@@ -142,10 +145,10 @@ export function Drawer() {
 
           <div className={styles.group}>
             <div className={styles.label}>You</div>
-            <NavLink href="/account" onClose={closeDrawer}>
+            <NavLink href="/account" onNavigate={closeDrawer}>
               Sign in
             </NavLink>
-            <NavLink href="/account" onClose={closeDrawer}>
+            <NavLink href="/account" onNavigate={closeDrawer}>
               Your certificate
             </NavLink>
           </div>
@@ -153,7 +156,7 @@ export function Drawer() {
 
         <div className={styles.staff}>
           <p>Do you work here?</p>
-          <NavLink href="/admin" onClose={closeDrawer}>
+          <NavLink href="/admin" onNavigate={closeDrawer}>
             Staff sign in
           </NavLink>
         </div>
