@@ -27,6 +27,17 @@ const BAYER = [
 /** Frames simulated for the single static render under reduced motion. */
 const STATIC_FRAMES = 90;
 
+/**
+ * Height slack, in CSS pixels, before a resize counts as a new viewport.
+ *
+ * Mobile browsers fire `resize` when the URL bar slides away — a height-only
+ * change of roughly 60-110px that is not a new layout. Re-seeding there
+ * restarted the entire field mid-scroll, which reads as a glitch rather than
+ * as ambience. Larger than any browser chrome transition, smaller than a real
+ * orientation change.
+ */
+const HEIGHT_SLACK = 120;
+
 type Particle = {
   x: number;
   y: number;
@@ -57,12 +68,22 @@ export function DitherField() {
     let bufH = 0;
     let time = 0;
     let particles: Particle[] = [];
+    /** Viewport size the current particle set was seeded for. */
+    let seededW = 0;
+    let seededH = 0;
     let raf: number | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
 
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     function seed() {
+      // Anchor the re-seed test to the size the field was built for, not to
+      // the last resize. Otherwise a run of individually-small height changes
+      // each clears the threshold and the particle count never catches up
+      // with the viewport.
+      seededW = width;
+      seededH = height;
+
       const count = Math.max(
         140,
         Math.min(Math.round((bufW * bufH) / 230), 900),
@@ -77,9 +98,33 @@ export function DitherField() {
       }));
     }
 
+    /**
+     * Fit both canvases to the viewport, re-seeding only when the viewport
+     * genuinely changed shape.
+     *
+     * Setting canvas.width/.height ALWAYS clears the bitmap, so the trails are
+     * lost on every resize whatever we do — that part is not fixable. What is
+     * fixable is the particle set: keeping it means the field carries on from
+     * where it was and the trails redraw over a handful of frames, instead of
+     * the whole thing restarting every time a phone hides its URL bar.
+     *
+     * Kept particles hold BUFFER-space coordinates, so a height shrink can
+     * leave a few of them past the new bottom edge. That needs no handling
+     * here: the `gone` test in step() catches them on the next frame and
+     * respawns them with their trail reset, which is the same relocation we
+     * would otherwise be doing by hand.
+     */
     function resize() {
-      width = window.innerWidth;
-      height = window.innerHeight;
+      const nextW = window.innerWidth;
+      const nextH = window.innerHeight;
+
+      const reseed =
+        particles.length === 0 ||
+        nextW !== seededW ||
+        Math.abs(nextH - seededH) > HEIGHT_SLACK;
+
+      width = nextW;
+      height = nextH;
       view!.width = width;
       view!.height = height;
 
@@ -88,10 +133,14 @@ export function DitherField() {
       buf.width = bufW;
       buf.height = bufH;
 
+      // Both canvases were just cleared to transparent by the assignments
+      // above; the buffer has to go back to opaque black or the first fade
+      // leaves it grey.
       bctx!.fillStyle = "#000";
       bctx!.fillRect(0, 0, bufW, bufH);
       vctx!.imageSmoothingEnabled = false;
-      seed();
+
+      if (reseed) seed();
     }
 
     /** Three summed sine waves — a cheap, seamless, slowly rotating flow field. */
@@ -194,8 +243,17 @@ export function DitherField() {
     const onResize = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
+        // Nothing actually moved. Mobile Safari fires resize on scroll
+        // direction changes where innerHeight lands back where it started,
+        // and reassigning canvas.width there would wipe the buffer for
+        // nothing.
+        if (window.innerWidth === width && window.innerHeight === height) {
+          return;
+        }
+
         resize();
-        // Resizing wipes the buffer, so a static render needs re-rolling.
+        // Resizing wipes the buffer either way, so a static render needs
+        // re-rolling whether or not the particles survived.
         if (motion.matches) play();
       }, 180);
     };
