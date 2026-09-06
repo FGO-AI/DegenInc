@@ -26,8 +26,19 @@
   /* --- the mask that eats the edges off display type --- */
   --erode: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='e'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='4' seed='4'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 1.4 0 0 0 -0.22'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23e)'/%3E%3C/svg%3E");
 
-  /* Masthead height, so in-page anchors don't land underneath it. */
-  --masthead: 72px;
+  /* Masthead height, so in-page anchors don't land underneath it.
+     Measured, not guessed: 14px padding + the 44px IconButton + 14px + the
+     1px bottom border. */
+  --masthead: 73px;
+}
+
+/* At 900px the padding goes to 16px and the seal to 48px, so the bar grows:
+   16 + 48 + 16 + 1. Anchors and the /soon holding page both size off this
+   token, and a value 9px short tucks every heading under the sticky bar. */
+@media (min-width: 900px) {
+  :root {
+    --masthead: 81px;
+  }
 }
 
 * {
