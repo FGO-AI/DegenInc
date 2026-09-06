@@ -123,11 +123,19 @@
 
 /* --- tables --- */
 
+/* The roughed border lives on .tablewrap and the scrolling on .tablescroll
+   inside it, and they must stay separate. `rough` draws its border on an
+   absolutely positioned ::before with inset: 0 — put that inside a scroll
+   container and it scrolls with the content, so on a narrow screen the border
+   slid out of view as you scrolled the table sideways. */
+.tablewrap {
+  background: var(--void);
+}
+
 /* min-width on the table plus overflow here means narrow screens scroll the
    table sideways instead of crushing the columns. */
-.tablewrap {
+.tablescroll {
   overflow-x: auto;
-  background: var(--void);
 }
 
 .tablewrap table {

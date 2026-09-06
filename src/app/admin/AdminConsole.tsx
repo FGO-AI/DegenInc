@@ -195,20 +195,24 @@ function Pane({
 function DataTable({ columns, empty }: { columns: string[]; empty: string }) {
   return (
     <div className={cx(styles.tablewrap, "rough")}>
-      <table>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td colSpan={columns.length}>{empty}</td>
-          </tr>
-        </tbody>
-      </table>
+      {/* The scroll container is INSIDE the roughed wrapper on purpose — see
+          the note in admin.module.css. */}
+      <div className={styles.tablescroll}>
+        <table>
+          <thead>
+            <tr>
+              {columns.map((c) => (
+                <th key={c}>{c}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={columns.length}>{empty}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
