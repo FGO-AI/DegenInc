@@ -3,6 +3,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow, Section, Wrap, cx } from "@/components/ui/Layout";
 import { getLiveFilingSafe, type FilingSlot } from "@/lib/db/queries";
+import { money } from "@/lib/format";
 import styles from "./FilingGrid.module.css";
 
 /**
@@ -14,12 +15,6 @@ import styles from "./FilingGrid.module.css";
 const COLUMNS = 4;
 
 const KINDS = ["Tee", "Tee", "Hood", "Reserved"];
-
-const money = (cents: number) =>
-  `$${(cents / 100).toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}`;
 
 type Cell =
   | { kind: "product"; product: FilingSlot }
