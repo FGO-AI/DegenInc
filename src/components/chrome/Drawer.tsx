@@ -85,12 +85,16 @@ export function Drawer() {
       aria-hidden={!open}
       inert={!open}
     >
+      {/* Decorative: the header Close button is the real control, and this
+          carrying the same label meant a screen reader announced two
+          identical "Close menu" controls. Already tabIndex={-1}, so hiding it
+          leaves nothing focusable inside an aria-hidden subtree. */}
       <button
         type="button"
         className={styles.scrim}
         onClick={closeDrawer}
         tabIndex={-1}
-        aria-label="Close menu"
+        aria-hidden="true"
       />
 
       <nav
