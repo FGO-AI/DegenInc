@@ -8,10 +8,17 @@ const HEADER = [
   { term: "Re", value: "Why this exists" },
 ];
 
-/** The charter, dressed as a photocopied internal memo. */
+/**
+ * The charter, dressed as a photocopied internal memo. The whole of /about.
+ *
+ * No id: it used to be an anchor target on the homepage, and nothing links to
+ * an anchor here now. Still tone="clear" — the memo is a bone slab on a
+ * transparent section, so the dither field reads around it exactly as it did
+ * between the hero and the filing grid.
+ */
 export function Memo() {
   return (
-    <Section id="memo" tone="clear">
+    <Section tone="clear">
       <Wrap>
         <div className={cx(styles.memo, "torn")}>
           <div className={styles.stamp} aria-hidden="true">

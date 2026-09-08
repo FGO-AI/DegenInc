@@ -1,0 +1,78 @@
+/* The block inverts on hover the way a filing slot does. Same gesture on
+   purpose: it is the same promise, that this box goes somewhere. */
+.block {
+  display: block;
+  background: transparent;
+  transition:
+    background var(--press),
+    color var(--press);
+
+  /* The padding is what the invert fills, so the white slab is not flush
+     against the type. The matching negative margin pulls the content back to
+     the measure, keeping the heading on the same left edge as the filing grid
+     above it. Both stay inside the section's own 16px / 32px padding, so this
+     never reaches the viewport edge. */
+  margin: -14px;
+  padding: 14px;
+}
+
+@media (min-width: 900px) {
+  .block {
+    margin: -20px;
+    padding: 20px;
+  }
+}
+
+/* Where the photo grid will go. Diagonal hatch = no asset yet, the same
+   treatment a filing slot gets while it is waiting on artwork. */
+.frame {
+  margin-top: 22px;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 9px,
+    rgba(255, 255, 255, 0.05) 9px 18px
+  );
+}
+
+/* Overrides the solid border the global `rough` utility draws. */
+.block .frame::before {
+  border-style: dashed;
+}
+
+.frame span {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  padding: 0 8px;
+}
+
+/* :active is included so the invert also fires on touch, where :hover sticks.
+   Focus is left to the global :focus-visible ring — inverting on focus too
+   would put a white outline against a white slab. */
+.block:hover,
+.block:active {
+  background: var(--paper);
+  color: #000;
+}
+
+.block:hover .frame::before,
+.block:active .frame::before {
+  border-color: #000;
+}
+
+/* The heading and the lede both set their own colour, so neither inherits the
+   inverted one. */
+.block:hover h2,
+.block:hover p,
+.block:hover .frame span,
+.block:active h2,
+.block:active p,
+.block:active .frame span {
+  color: #000;
+}

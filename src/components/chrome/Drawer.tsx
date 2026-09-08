@@ -11,9 +11,9 @@ const CATEGORIES = ["Tees", "Hoodies", "Outerwear", "Headwear", "Accessories"];
 
 const HOUSE = [
   { label: "Current filing", href: "/#filing" },
-  { label: "The collective", href: "/#collective" },
+  { label: "Gallery", href: "/gallery" },
   { label: "Open call", href: "/#opencall" },
-  { label: "Charter", href: "/#memo" },
+  { label: "About", href: "/about" },
 ];
 
 const FOCUSABLE =

@@ -211,12 +211,14 @@ needs no credential at all — it is a binding, not a connection string.
 
 ## Routes
 
-| Route      | What it is                                                        |
-| ---------- | ----------------------------------------------------------------- |
-| `/`        | Storefront: hero, charter memo, Filing 001 grid, collective, open call |
-| `/soon`    | "In Production" holding page — where every unbuilt link lands      |
-| `/account` | Member record: sign-in, certificate preview, order history         |
-| `/admin`   | Back of house: orders, filings, members, submissions               |
+| Route      | What it is                                                     |
+| ---------- | -------------------------------------------------------------- |
+| `/`        | Storefront: hero, Filing 001 grid, gallery, open call          |
+| `/about`   | The charter, as a photocopied internal memo                    |
+| `/gallery` | Photographs of the runs — empty until the first filing ships   |
+| `/soon`    | "In Production" holding page — where every unbuilt link lands   |
+| `/account` | Member record: sign-in, certificate preview, order history     |
+| `/admin`   | Back of house: orders, filings, members, submissions           |
 
 ## Layout
 
@@ -228,6 +230,8 @@ src/
     layout.tsx              fonts, ambient layer, drawer provider
     globals.css             design tokens, reset, distress utilities
     page.tsx                storefront
+    about/                  the charter + Memo
+    gallery/                photo grid, empty for now
     soon/                   holding page
     account/                member record + SignInPanel
     admin/                  AdminConsole (gate + tabbed panes)
@@ -238,7 +242,8 @@ src/
       Overlays              film grain + scanlines
       Drawer, DrawerProvider, Masthead, Ticker, Footer
     store/                  storefront sections
-      Hero, Memo, FilingGrid, Collective, OpenCall
+      Hero, FilingGrid, Gallery, OpenCall
+      Collective            parked — returns before launch
     ui/                     reusable primitives
       Button, Field, Panel, Certificate, EmptyState, IconButton, Layout
   lib/
