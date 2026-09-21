@@ -57,3 +57,7 @@ cloudflare-env.d.ts
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# github pages static preview (scripts/preview-export.mjs)
+# Routes are copied here only for the duration of that build.
+.preview-staged/

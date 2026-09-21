@@ -1,0 +1,65 @@
+# Publishes the static storefront preview to GitHub Pages.
+#
+# This is a LOOK-AT-IT build, not the real deployment. Pages serves files and
+# nothing else, so the preview has no database, no sign-in and no checkout:
+# scripts/preview-export.mjs stages away /api, /account and /admin before the
+# export, and the filing grid falls back to its "awaiting asset" slots because
+# getLiveFilingSafe() returns null with no D1 binding.
+#
+# The real deployment is Cloudflare Workers (`npm run deploy`), which runs all
+# of it. See README "Cloudflare deployment".
+name: Pages preview
+
+on:
+  push:
+    branches: [main, ui-bug-pass]
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs to mint an id-token for deploy-pages, and write Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two publishes race. Don't cancel one in flight: a half-finished
+# Pages deploy is worse than a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Emits cloudflare-env.d.ts, which is gitignored but which the type check
+      # during `next build` needs. Same thing the `prebuild` hook does locally.
+      - run: npm run cf-typegen
+
+      # basePath comes from GITHUB_REPOSITORY, which Actions sets, so the export
+      # is prefixed with /<repo> exactly as Pages serves it.
+      - run: npm run preview:pages
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
