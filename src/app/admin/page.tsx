@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireStaff } from "@/lib/auth/guards";
+import { getAdminCatalog } from "@/lib/db/queries";
 import { AdminConsole } from "./AdminConsole";
 
 export const metadata: Metadata = {
@@ -12,6 +13,13 @@ export default async function AdminPage() {
   // The layout already guarded this route; calling again is cheap (the session
   // lookup is request-cached) and gives us the user to render.
   const user = await requireStaff();
+  const filings = await getAdminCatalog();
 
-  return <AdminConsole userName={user.name || user.email} role={user.role} />;
+  return (
+    <AdminConsole
+      userName={user.name || user.email}
+      role={user.role}
+      filings={filings}
+    />
+  );
 }

@@ -41,10 +41,28 @@
       // drizzle-kit generates into this same directory.
       "migrations_dir": "migrations"
     }
+  ],
+
+  // Product images, served by src/app/images/[...key]/route.ts. Reached in
+  // code as env.PRODUCT_IMAGES; nothing reads the bucket name.
+  "r2_buckets": [
+    {
+      "binding": "PRODUCT_IMAGES",
+
+      // UNCONFIRMED. This bucket has not been created. Local development does
+      // not need it — miniflare keeps a simulated bucket on disk under
+      // .wrangler/state — but every remote command (`deploy`) does:
+      //
+      //   npx wrangler r2 bucket create degen-inc-product-images
+      //
+      // Requires a Cloudflare login. If it is created under another name,
+      // change this value to match; the binding name above stays as it is.
+      "bucket_name": "degen-inc-product-images"
+    }
   ]
 
   // Not configured yet — see README "Cloudflare deployment":
-  //   images        — no next/image usage in the app today
-  //   r2_buckets    — product image bucket
+  //   images        — no next/image usage; product images are plain <img>
+  //                   straight from R2, so Cloudflare Images is not needed yet
   //   kv_namespaces — optional session store
 }

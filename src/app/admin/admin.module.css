@@ -123,11 +123,19 @@
 
 /* --- tables --- */
 
+/* The roughed border lives on .tablewrap and the scrolling on .tablescroll
+   inside it, and they must stay separate. `rough` draws its border on an
+   absolutely positioned ::before with inset: 0 — put that inside a scroll
+   container and it scrolls with the content, so on a narrow screen the border
+   slid out of view as you scrolled the table sideways. */
+.tablewrap {
+  background: var(--void);
+}
+
 /* min-width on the table plus overflow here means narrow screens scroll the
    table sideways instead of crushing the columns. */
-.tablewrap {
+.tablescroll {
   overflow-x: auto;
-  background: var(--void);
 }
 
 .tablewrap table {
@@ -154,4 +162,208 @@
   font-size: 13px;
   color: var(--smoke);
   text-align: center;
+}
+
+/* --- filings ---
+   A filing is a roughed card; a product inside it is a plain ruled box, so the
+   nesting reads without stacking a second SVG filter per row. */
+
+.filings,
+.products {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.filing {
+  background: var(--void);
+}
+
+.product {
+  background: var(--ink);
+  border: 1px solid var(--ash);
+}
+
+/* The whole header row is the disclosure button. */
+.rowhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  width: 100%;
+  padding: 16px 18px;
+  transition: background var(--press);
+}
+
+.rowhead:hover {
+  background: var(--coal);
+}
+
+.rowtitle {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rowname {
+  color: var(--bone);
+}
+
+.chev {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--smoke);
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  border: 1px solid var(--iron);
+  padding: 3px 8px;
+}
+
+.badge[data-status="scheduled"] {
+  color: var(--paper);
+  border-color: var(--paper);
+}
+
+/* Live is the one state customers can see, so it is the one that inverts. */
+.badge[data-status="live"] {
+  background: var(--paper);
+  color: #000;
+  border-color: var(--paper);
+}
+
+.rowbody {
+  padding: 18px;
+  border-top: 1px solid var(--ash);
+}
+
+.subhead {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  margin: 26px 0 12px;
+}
+
+.quiet {
+  color: var(--smoke);
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+
+/* --- status --- */
+
+.statusrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.warn {
+  flex-basis: 100%;
+  font-size: 14px;
+  color: var(--paper);
+  border-left: 2px solid var(--paper);
+  padding-left: 10px;
+}
+
+/* --- forms --- */
+
+/* The new-filing form, opened from the toolrow. */
+.editor {
+  background: var(--void);
+  padding: 22px 18px;
+  margin-bottom: 22px;
+}
+
+/* An add-something form at the foot of a row. */
+.addform {
+  margin-top: 18px;
+  padding-top: 4px;
+}
+
+.formgrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: 14px;
+}
+
+@media (min-width: 700px) {
+  .formgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Same treatment as the sign-in panel's status line. */
+.status {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper);
+  min-height: 1.4em;
+}
+
+.statusrow .status {
+  flex-basis: 100%;
+  margin-top: 0;
+}
+
+/* --- variants and images --- */
+
+.minitable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.minitable th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  border-bottom: 1px solid var(--iron);
+}
+
+.minitable td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ash);
+  white-space: nowrap;
+}
+
+.thumbs {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Same 4:5 frame the storefront grid reserves for a product shot. */
+.thumbs img {
+  display: block;
+  width: 96px;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  background: var(--coal);
+  border: 1px solid var(--iron);
+}
+
+.thumbs a:hover img {
+  border-color: var(--paper);
 }
