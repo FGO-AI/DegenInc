@@ -94,7 +94,25 @@ export const filings = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("filings_status_idx").on(t.status)],
+  (t) => [
+    index("filings_status_idx").on(t.status),
+
+    /**
+     * At most one live filing, enforced here rather than by anyone remembering.
+     *
+     * getLiveFiling() puts the lowest-numbered live filing on the storefront
+     * and silently ignores the rest, so a second live filing was a drop that
+     * never appeared. A partial unique index covers only the rows its WHERE
+     * matches: any number of drafts, scheduled or closed filings coexist, and
+     * a second 'live' row fails with "UNIQUE constraint failed: filings.status"
+     * — the same constraint-decides discipline as the stock CHECK below.
+     * updateFilingStatus() turns that failure into a message naming the filing
+     * that is still live.
+     */
+    uniqueIndex("filings_one_live_idx")
+      .on(t.status)
+      .where(sql`${t.status} = 'live'`),
+  ],
 );
 
 export const products = sqliteTable(
@@ -220,6 +238,17 @@ export const orderItems = sqliteTable(
     unitPriceCents: integer("unit_price_cents").notNull(),
     /** Denormalised so an order still reads correctly if the product is gone. */
     nameSnapshot: text("name_snapshot").notNull(),
+    /**
+     * Which variant, as a buyer reads it: "M / Black". Denormalised the same
+     * way, and for the same reason — two sizes of one shirt in one order are
+     * otherwise two identical lines on the receipt.
+     *
+     * Nullable only because SQLite cannot add a NOT NULL column without a
+     * default, and a made-up default would be a lie on old receipts. Every
+     * line written since this column exists has one; null means the line
+     * predates it.
+     */
+    variantSnapshot: text("variant_snapshot"),
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),

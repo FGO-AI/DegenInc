@@ -36,6 +36,16 @@ const preview: NextConfig =
     : {};
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // The default is 1MB, and a product photo off a phone is routinely more.
+      // uploadProductImage() takes the file through a Server Action, so the cap
+      // has to clear MAX_IMAGE_BYTES (8MB, src/lib/images.ts) plus the
+      // multipart overhead of the rest of the form. The action enforces 8MB
+      // itself; this only has to not get in the way first.
+      bodySizeLimit: "10mb",
+    },
+  },
   ...preview,
 };
 

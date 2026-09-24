@@ -184,15 +184,32 @@ function OrderList({ orders }: { orders: MemberOrder[] }) {
             <span className={styles.total}>{money(order.totalCents)}</span>
           </div>
 
-          <p className={styles.lines}>
-            {order.lines.length > 0
-              ? order.lines
-                  .map((l) =>
-                    l.quantity > 1 ? `${l.name} x${l.quantity}` : l.name,
-                  )
-                  .join(", ")
-              : "No line items on file"}
-          </p>
+          {/* One row per line item, not a comma-joined sentence: with the
+              variant beside each name, two sizes of one shirt read as two
+              different lines. Lines predating variant_snapshot show the
+              name alone. */}
+          <ul className={styles.lines}>
+            {order.lines.length > 0 ? (
+              order.lines.map((l, i) => (
+                <li key={i}>
+                  {l.name}
+                  {/* A real space, not just margin, so assistive tech and
+                      copied text do not read "TeeM / Black". */}
+                  {l.variant && (
+                    <>
+                      {" "}
+                      <span className={cx("mono", styles.variant)}>
+                        {l.variant}
+                      </span>
+                    </>
+                  )}
+                  {l.quantity > 1 && ` x${l.quantity}`}
+                </li>
+              ))
+            ) : (
+              <li>No line items on file</li>
+            )}
+          </ul>
 
           <span className="mono">{order.status}</span>
         </li>

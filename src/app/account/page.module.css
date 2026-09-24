@@ -47,7 +47,13 @@
 }
 
 .lines {
+  list-style: none;
   margin: 6px 0 8px;
   color: var(--smoke);
   font-size: 14px;
+}
+
+/* "M / Black" after the product name, in the form-label voice. */
+.variant {
+  margin: 0 8px 0 4px;
 }

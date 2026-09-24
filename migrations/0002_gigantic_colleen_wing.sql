@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `filings_one_live_idx` ON `filings` (`status`) WHERE "filings"."status" = 'live';

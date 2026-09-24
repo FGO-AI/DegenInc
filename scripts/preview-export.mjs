@@ -36,9 +36,12 @@ const STAGE = join(root, ".preview-staged");
 
 /** Routes that cannot be statically exported, and why. */
 const EXCLUDED = [
-  ["src/app/api", "Better Auth catch-all + checkout POST; both need a request"],
+  ["src/app/api", "auth, checkout and cart-detail handlers; all need a request"],
   ["src/app/account", "reads the session via headers(), so it is always dynamic"],
   ["src/app/admin", "requireStaff() redirects in the layout"],
+  ["src/app/images", "streams from the R2 binding; there is no bucket on Pages"],
+  ["src/app/cart", "reads the session and hands out a Server Action"],
+  ["src/app/product", "a page per live product, read from D1 at request time"],
 ];
 
 const moved = [];
@@ -77,6 +80,14 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
 
 console.log("Staging routes that need a server:");
 stage();
+
+// tsconfig.json includes .next/dev/types, and `next build` type-checks it. That
+// directory is written by `next dev` and its validator imports every route that
+// existed when dev last ran — including the ones just staged away — so after
+// any local `npm run dev` the export failed on "Cannot find module
+// src/app/admin/page.js". It is generated output; the next `next dev` rewrites
+// it. (CI never has it: the workflow builds from a clean checkout.)
+rmSync(join(root, ".next/dev/types"), { recursive: true, force: true });
 
 try {
   console.log("\nBuilding static export...\n");
