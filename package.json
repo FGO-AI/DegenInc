@@ -16,7 +16,8 @@
     "db:migrate": "wrangler d1 migrations apply degen-inc --local",
     "db:migrate:remote": "wrangler d1 migrations apply degen-inc --remote",
     "db:seed": "wrangler d1 execute degen-inc --local --file scripts/seed.sql",
-    "preview:pages": "node scripts/preview-export.mjs"
+    "preview:pages": "node scripts/preview-export.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-degen-inc \"node rules.test.mjs\""
   },
   "dependencies": {
     "better-auth": "^1.7.1",
@@ -27,6 +28,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@opennextjs/cloudflare": "^1.20.2",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -34,6 +36,9 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
+    "firebase-tools": "^15.31.0",
     "typescript": "^5",
     "wrangler": "^4.123.0"
   }

@@ -30,6 +30,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# firebase: emulator logs and the CLI's deploy cache
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.firebase/
+
 # env files (can opt-in for committing if needed)
 .env*
 # ...but the template holds no secrets and should be committed.

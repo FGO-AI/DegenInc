@@ -1,0 +1,146 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      // Custom claim, set only by the Admin SDK. Free to read (no extra
+      // document fetch), and not something a client can forge.
+      return isSignedIn() ? request.auth.token.role : null;
+    }
+
+    function isStaff() {
+      return role() == 'staff' || role() == 'owner';
+    }
+
+    function isOwner() {
+      return role() == 'owner';
+    }
+
+    // Whether a filing — or a product, through its own denormalized copies of
+    // its filing's fields — can be seen right now. Closed stays visible
+    // outright. Live is visible once publicAt has passed, or earlier to a
+    // signed-in member once memberAccessAt has passed. Staff see everything,
+    // which each rule adds itself.
+    //
+    // request.time is the server's clock, never the client's. "Member" means
+    // any signed-in account, as it always has in this codebase — including one
+    // whose role claim a Cloud Function has not set yet.
+    //
+    // The comparisons are deliberately bare. A missing or non-timestamp field
+    // makes its branch an evaluation error, which grants nothing — "not yet",
+    // the way NULL compared with now() is never true in SQL. Guarding them
+    // with `is timestamp` reads more defensively but breaks every query: the
+    // query checker can prove `request.time >= publicAt` from a
+    // `where publicAt <= now` filter, and cannot prove the guarded form.
+    function isVisible(status, data) {
+      return status == 'closed'
+          || (status == 'live'
+              && (request.time >= data.publicAt
+                  || (isSignedIn() && request.time >= data.memberAccessAt)));
+    }
+
+    // ---------------- users ----------------
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isStaff());
+      // role is never client-writable, by anyone, including the user
+      // themselves — only a Cloud Function using the Admin SDK sets it.
+      allow update: if isSignedIn() && request.auth.uid == uid
+                    && !('role' in request.resource.data.diff(resource.data).affectedKeys());
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'customer';
+      allow delete: if false;
+    }
+
+    // ---------------- filings ----------------
+    match /filings/{filingId} {
+      allow read: if isVisible(resource.data.status, resource.data) || isStaff();
+      // Status transitions are business logic (the one-live-filing rule,
+      // the draft->scheduled->live->closed progression) — a Cloud Function
+      // handles this, not a raw client write.
+      allow write: if false;
+    }
+
+    // Single well-known pointer doc: which filing (if any) is live right
+    // now. Lets the storefront find it in one cheap read instead of
+    // scanning the filings collection. Written only by the same Cloud
+    // Function that changes a filing's status.
+    match /state/currentFiling {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---------------- products ----------------
+    match /products/{productId} {
+      // filingStatus, publicAt and memberAccessAt are denormalized copies of
+      // the parent filing's fields, and this rule reads the product's own
+      // copies — never the filing. Avoids a get() on every product read. The
+      // Cloud Function that owns status changes writes all three together,
+      // in the same write as the filing, so they cannot drift apart.
+      allow read: if isVisible(resource.data.filingStatus, resource.data) || isStaff();
+      allow write: if false;
+
+      match /variants/{variantId} {
+        allow read: if get(/databases/$(database)/documents/products/$(productId)).data.filingStatus
+                        in ['live', 'closed'] || isStaff();
+        allow write: if false;
+      }
+    }
+
+    // ---------------- orders / certificates / counters ----------------
+    // All business-logic writes. A client places an order by calling a
+    // Cloud Function, never by writing here directly.
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (resource.data.memberId == request.auth.uid || isStaff());
+      allow write: if false;
+    }
+
+    match /certificates/{memberId} {
+      allow read: if isSignedIn() && (request.auth.uid == memberId || isStaff());
+      allow write: if false;
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
+    // ---------------- votes ----------------
+    // Doc id is `${filingId}_${memberId}` — Firestore's own id uniqueness
+    // is what enforces one vote per member per filing, the same way the
+    // SQL schema used a unique constraint on (filing_id, member_id).
+    //
+    // A vote is for an open-call submission, not a product (votes.submission_id
+    // in the D1 schema). Submissions carry no filingId, so "this submission
+    // belongs to this filing" cannot be checked; the stand-in is that the
+    // submission exists and staff have approved it.
+    match /votes/{voteId} {
+      allow read: if isSignedIn() && (resource.data.memberId == request.auth.uid || isStaff());
+      allow create: if isSignedIn()
+                    && request.resource.data.keys().hasOnly(['filingId', 'memberId', 'submissionId', 'createdAt'])
+                    && request.resource.data.memberId == request.auth.uid
+                    && voteId == request.resource.data.filingId + '_' + request.auth.uid
+                    && get(/databases/$(database)/documents/filings/$(request.resource.data.filingId)).data.status == 'live'
+                    && get(/databases/$(database)/documents/submissions/$(request.resource.data.submissionId)).data.status == 'approved';
+      allow update, delete: if false;
+    }
+
+    // ---------------- submissions ----------------
+    // Anyone may submit, signed in or not — but only what a submitter
+    // legitimately sends: exactly these fields, arriving as 'new'. The review
+    // fields (reviewedBy, reviewedAt) and every other status are staff's to
+    // set, through allow update. name, contact and workUrl are required, as
+    // they were NOT NULL in the D1 schema; note and createdAt are optional.
+    match /submissions/{submissionId} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'contact', 'workUrl', 'note', 'status', 'createdAt'])
+                    && request.resource.data.keys().hasAll(['name', 'contact', 'workUrl', 'status'])
+                    && request.resource.data.status == 'new';
+      allow read: if isStaff();
+      allow update: if isStaff();
+      allow delete: if false;
+    }
+  }
+}

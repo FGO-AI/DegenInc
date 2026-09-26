@@ -85,6 +85,29 @@ key was tolerable.
   page. Not fine for the checkout write path, which must rely on the constraint
   rather than a number it read a moment ago.
 
+## Firebase (migration in progress)
+
+The data layer is moving from D1 to Firestore, and hosting from Workers to
+Firebase App Hosting, so web, iOS and Android can share one backend. Nothing
+in the app reads Firestore yet; what exists so far is the security model.
+
+- `firestore.rules` — who may read and write each collection. Clients read
+  directly; every business-logic write (filings, products, orders,
+  certificates, counters) is denied to clients and left to Cloud Functions.
+- `rules.test.mjs` — proves the rules against the real Firestore emulator:
+
+  ```bash
+  npm run test:rules
+  ```
+
+  The emulator is a Java program: this needs **JDK 21** on `PATH` (for
+  example `winget install Microsoft.OpenJDK.21`). It runs against the
+  `demo-degen-inc` project id, so it needs no Firebase login and touches no
+  real project.
+- `apphosting.yaml` — App Hosting backend settings (instance cap). The
+  backend itself is connected from the Firebase console once the project
+  exists.
+
 ## Cloudflare deployment
 
 Hosted on **Cloudflare Workers** via the [OpenNext](https://opennext.js.org/cloudflare)
