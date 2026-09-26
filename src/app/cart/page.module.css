@@ -1,0 +1,165 @@
+/* The bag. Same receipt-list treatment as the order history on /account:
+   `rough` draws the chewed border on ::before and sets border: none
+   !important on the list itself, so the row rules live on .line. */
+
+.lines {
+  list-style: none;
+  background: var(--void);
+}
+
+.line {
+  padding: 16px;
+  border-bottom: 1px solid var(--ash);
+}
+
+.line:last-child {
+  border-bottom: none;
+}
+
+/* Name on the left, line total on the right. */
+.lineHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.name {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.total {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 17px;
+  white-space: nowrap;
+}
+
+.meta {
+  display: block;
+  margin: 4px 0 12px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* − n +. Each button is a full 44px square tap target. */
+.stepper {
+  display: flex;
+  border: 1px solid var(--iron);
+}
+
+.stepper button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 16px;
+  text-align: center;
+  transition:
+    background var(--press),
+    color var(--press);
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--paper);
+  color: #000;
+}
+
+.stepper button:disabled {
+  color: var(--iron);
+  cursor: not-allowed;
+}
+
+.stepper output {
+  min-width: 44px;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 14px;
+  border-left: 1px solid var(--iron);
+  border-right: 1px solid var(--iron);
+}
+
+/* Styled like BackLink: an underlined mono word. Height is the tap target. */
+.remove {
+  min-height: 44px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--smoke);
+  text-decoration: underline;
+  text-decoration-color: var(--iron);
+  text-underline-offset: 4px;
+}
+
+.remove:hover:not(:disabled) {
+  color: var(--paper);
+  text-decoration-color: var(--paper);
+}
+
+/* A line that cannot be ordered as it stands. Plain, not alarming. */
+.issue {
+  margin-top: 12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--paper);
+  font-size: 14px;
+  color: var(--paper);
+}
+
+.subtotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 16px 0;
+}
+
+/* Line above the inline sign-in panel. */
+.lead {
+  color: var(--smoke);
+  font-size: 15px;
+  margin-bottom: 14px;
+  max-width: 46ch;
+}
+
+/* The shared Button has no disabled state of its own; say so here. */
+.place:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.place:disabled:hover {
+  background: var(--paper);
+  color: #000;
+}
+
+.retry {
+  margin-top: 12px;
+}
+
+.hint {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--smoke);
+}
+
+/* Same treatment as SignInPanel's status line. */
+.status {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper);
+  min-height: 1.4em;
+}

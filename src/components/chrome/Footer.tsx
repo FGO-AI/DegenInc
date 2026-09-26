@@ -40,17 +40,17 @@ const COLUMNS = [
     ],
   },
   {
-    heading: "Collective",
+    heading: "Look",
     links: [
-      { label: "Become a member", href: "/account" },
+      { label: "Gallery", href: "/gallery" },
+      { label: "Current filing", href: "/#filing" },
       { label: "Submit a design", href: "/#opencall" },
-      { label: "Reps", href: "/soon" },
     ],
   },
   {
     heading: "Company",
     links: [
-      { label: "Charter", href: "/#memo" },
+      { label: "About", href: "/about" },
       { label: "Shipping and returns", href: "/soon" },
       { label: "Contact", href: "/soon" },
     ],

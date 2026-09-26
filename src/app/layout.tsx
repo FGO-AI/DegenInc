@@ -4,6 +4,7 @@ import { Drawer } from "@/components/chrome/Drawer";
 import { DrawerProvider } from "@/components/chrome/DrawerProvider";
 import { Overlays } from "@/components/chrome/Overlays";
 import { SvgFilters } from "@/components/chrome/SvgFilters";
+import { CartProvider } from "@/lib/cart/CartProvider";
 import { fontVariables } from "@/lib/fonts";
 import "./globals.css";
 
@@ -29,11 +30,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <DitherField />
         <Overlays />
 
-        <DrawerProvider>
-          <Drawer />
-          {/* z-index 2 — lifts the page above the canvas and its overlays. */}
-          <div className="stack">{children}</div>
-        </DrawerProvider>
+        {/* The bag wraps everything that renders a Masthead, which is every
+            page, so one count serves them all. */}
+        <CartProvider>
+          <DrawerProvider>
+            <Drawer />
+            {/* z-index 2 — lifts the page above the canvas and its overlays. */}
+            <div className="stack">{children}</div>
+          </DrawerProvider>
+        </CartProvider>
       </body>
     </html>
   );

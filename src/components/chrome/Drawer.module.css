@@ -37,6 +37,8 @@
   transform: translateX(-101%);
   transition: transform 180ms ease-out;
   overflow-y: auto;
+  /* Scrolling to the end of the menu must not chain into the page behind it. */
+  overscroll-behavior: contain;
   border-right: 1px solid var(--iron);
 }
 
@@ -131,6 +133,7 @@
 
 .staff a {
   display: inline-block;
+  position: relative;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.16em;
@@ -141,6 +144,19 @@
   transition:
     color var(--press),
     border-color var(--press);
+}
+
+/* Stretch the tap target to 44px without moving anything.
+   Padding is not an option here: the border-bottom IS the visible underline,
+   so padding would push the rule away from the text. An absolutely positioned
+   overlay is out of flow, so it changes no layout and no apparent type size,
+   and pseudo-elements count as part of the element for hit testing. The link's
+   own box is ~21px (11px mono at 1.6, plus 2px padding and the 1px rule), so
+   12px top and bottom clears 44. */
+.staff a::after {
+  content: "";
+  position: absolute;
+  inset: -12px 0;
 }
 
 .staff a:hover {

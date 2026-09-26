@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BurgerIcon, IconButton } from "@/components/ui/IconButton";
+import { CartButton } from "./CartButton";
 import { useDrawer } from "./DrawerProvider";
 import styles from "./Masthead.module.css";
 
@@ -46,9 +47,7 @@ export function Masthead({
       </div>
 
       <div className={styles.right}>
-        {right ?? (
-          <IconButton aria-label="Your bag, 0 items">0</IconButton>
-        )}
+        {right ?? <CartButton />}
       </div>
     </header>
   );

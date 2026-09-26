@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes } from "react";
+import Link from "next/link";
+import type { ButtonHTMLAttributes, ComponentProps } from "react";
 import styles from "./IconButton.module.css";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement>;
@@ -13,6 +14,22 @@ export function IconButton({ className, children, ...rest }: Props) {
     >
       {children}
     </button>
+  );
+}
+
+/** Same control, but it navigates — the bag in the masthead goes to /cart. */
+export function IconButtonLink({
+  className,
+  children,
+  ...rest
+}: ComponentProps<typeof Link>) {
+  return (
+    <Link
+      className={[styles.iconbtn, className].filter(Boolean).join(" ")}
+      {...rest}
+    >
+      {children}
+    </Link>
   );
 }
 

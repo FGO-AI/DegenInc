@@ -1,3 +1,4 @@
+// Parked: off the homepage until membership means something. Back before launch.
 import { Certificate } from "@/components/ui/Certificate";
 import { Cols, Prose, Section, Wrap } from "@/components/ui/Layout";
 

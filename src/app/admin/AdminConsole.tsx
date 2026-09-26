@@ -9,6 +9,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { IconButton } from "@/components/ui/IconButton";
 import { cx } from "@/components/ui/Layout";
 import { signOut } from "@/lib/auth/client";
+import type { AdminFiling } from "@/lib/db/queries";
+import { FilingsPane } from "./Filings";
 import styles from "./admin.module.css";
 
 const PANES = [
@@ -23,6 +25,8 @@ type PaneId = (typeof PANES)[number]["id"];
 type Props = {
   userName: string;
   role: "member" | "staff" | "owner";
+  /** Read by the server page through getAdminCatalog(), guarded there. */
+  filings: AdminFiling[];
 };
 
 /**
@@ -33,7 +37,7 @@ type Props = {
  * renders — so reaching this code at all means the check already passed. The
  * previous version flipped a `useState` and let anybody in.
  */
-export function AdminConsole({ userName, role }: Props) {
+export function AdminConsole({ userName, role, filings }: Props) {
   const [pane, setPane] = useState<PaneId>("orders");
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const router = useRouter();
@@ -129,13 +133,7 @@ export function AdminConsole({ userName, role }: Props) {
               Each filing is one drop. Set the products, the run size, and when
               members get early access.
             </p>
-            <div className={styles.toolrow}>
-              <Button compact>New filing</Button>
-            </div>
-            <EmptyState title="No filings yet">
-              Create a filing, add products to it, then schedule it. Nothing
-              goes live until you publish it.
-            </EmptyState>
+            <FilingsPane initial={filings} canPublish={role === "owner"} />
           </Pane>
 
           <Pane id="members" active={pane}>
@@ -195,20 +193,24 @@ function Pane({
 function DataTable({ columns, empty }: { columns: string[]; empty: string }) {
   return (
     <div className={cx(styles.tablewrap, "rough")}>
-      <table>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td colSpan={columns.length}>{empty}</td>
-          </tr>
-        </tbody>
-      </table>
+      {/* The scroll container is INSIDE the roughed wrapper on purpose — see
+          the note in admin.module.css. */}
+      <div className={styles.tablescroll}>
+        <table>
+          <thead>
+            <tr>
+              {columns.map((c) => (
+                <th key={c}>{c}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colSpan={columns.length}>{empty}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,10 @@
 import { getSession } from "@/lib/auth/guards";
-import { OutOfStockError, purchaseVariant } from "@/lib/db/checkout";
+import {
+  FilingClosedError,
+  InvalidOrderError,
+  OutOfStockError,
+  purchaseVariant,
+} from "@/lib/db/checkout";
 
 /**
  * Reserve stock for the signed-in member.
@@ -39,6 +44,16 @@ export async function POST(request: Request): Promise<Response> {
   } catch (err) {
     if (err instanceof OutOfStockError) {
       return Response.json({ ok: false, error: "out_of_stock" }, { status: 409 });
+    }
+    // Same shape: a real product, on sale a moment ago, and nothing written.
+    if (err instanceof FilingClosedError) {
+      return Response.json({ ok: false, error: "filing_closed" }, { status: 409 });
+    }
+    // An unknown variant or a quantity below 1, refused before any write.
+    // (A bad quantity used to reach the batch, trip the order_items quantity
+    // CHECK and come back here as a misleading out_of_stock.)
+    if (err instanceof InvalidOrderError) {
+      return Response.json({ ok: false, error: err.message }, { status: 400 });
     }
     throw err;
   }

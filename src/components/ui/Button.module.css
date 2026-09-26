@@ -47,6 +47,7 @@
 /* Underlined monospace "back" affordance. */
 .backlink {
   display: inline-block;
+  position: relative;
   width: auto;
   margin-top: 22px;
   font-family: var(--mono);
@@ -61,6 +62,15 @@
   border-left: none;
   border-right: none;
   text-align: left;
+}
+
+/* Tap target to 44px. Same reasoning as .staff a in Drawer.module.css: the
+   border-bottom is the underline, so padding would move the rule; an out-of-
+   flow overlay leaves the layout and the apparent type size untouched. */
+.backlink::after {
+  content: "";
+  position: absolute;
+  inset: -12px 0;
 }
 
 .backlink:hover {

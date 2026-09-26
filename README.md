@@ -85,6 +85,29 @@ key was tolerable.
   page. Not fine for the checkout write path, which must rely on the constraint
   rather than a number it read a moment ago.
 
+## Firebase (migration in progress)
+
+The data layer is moving from D1 to Firestore, and hosting from Workers to
+Firebase App Hosting, so web, iOS and Android can share one backend. Nothing
+in the app reads Firestore yet; what exists so far is the security model.
+
+- `firestore.rules` — who may read and write each collection. Clients read
+  directly; every business-logic write (filings, products, orders,
+  certificates, counters) is denied to clients and left to Cloud Functions.
+- `rules.test.mjs` — proves the rules against the real Firestore emulator:
+
+  ```bash
+  npm run test:rules
+  ```
+
+  The emulator is a Java program: this needs **JDK 21** on `PATH` (for
+  example `winget install Microsoft.OpenJDK.21`). It runs against the
+  `demo-degen-inc` project id, so it needs no Firebase login and touches no
+  real project.
+- `apphosting.yaml` — App Hosting backend settings (instance cap). The
+  backend itself is connected from the Firebase console once the project
+  exists.
+
 ## Cloudflare deployment
 
 Hosted on **Cloudflare Workers** via the [OpenNext](https://opennext.js.org/cloudflare)
@@ -172,6 +195,13 @@ Secrets, or `wrangler secret put`.
   **`database_id` is a placeholder** until someone with a Cloudflare login runs
   `npx wrangler d1 create degen-inc` and pastes the real id. Local development
   ignores it; every remote command needs it.
+- `PRODUCT_IMAGES` — the R2 bucket behind `/images/<key>`. **The bucket name
+  `degen-inc-product-images` is unconfirmed**: nobody has created it yet. Run
+  `npx wrangler r2 bucket create degen-inc-product-images` with a Cloudflare
+  login, or change `bucket_name` to match whatever you do create. Local
+  development simulates the bucket on disk; `deploy` needs the real one.
+  Uploads are capped at 8MB by the action and by `serverActions.bodySizeLimit`
+  in `next.config.ts`, which has to stay a little above that.
 - `open-next.config.ts` — deliberately bare.
 
 ### Environment variables
@@ -186,10 +216,10 @@ needs no credential at all — it is a binding, not a connection string.
 
 ### Not configured yet
 
-- **R2** for product images (`product_images.r2_key` already holds object keys).
-- **Cloudflare Images** for `next/image`. Zero `next/image` usages today, so
-  nothing is broken; configure the `images` binding *or* set
-  `images.unoptimized` before adding the first one.
+- **Cloudflare Images** for `next/image`. Deliberately skipped: product images
+  are plain `<img>` served straight from R2, and there are zero `next/image`
+  usages. Configure the `images` binding *or* set `images.unoptimized` before
+  adding the first one.
 - **Turnstile** on the open call form — required before `submissions` accepts
   public writes.
 - **Stripe.** On Workers the default Node crypto path throws: initialize with
@@ -211,12 +241,14 @@ needs no credential at all — it is a binding, not a connection string.
 
 ## Routes
 
-| Route      | What it is                                                        |
-| ---------- | ----------------------------------------------------------------- |
-| `/`        | Storefront: hero, charter memo, Filing 001 grid, collective, open call |
-| `/soon`    | "In Production" holding page — where every unbuilt link lands      |
-| `/account` | Member record: sign-in, certificate preview, order history         |
-| `/admin`   | Back of house: orders, filings, members, submissions               |
+| Route      | What it is                                                     |
+| ---------- | -------------------------------------------------------------- |
+| `/`        | Storefront: hero, Filing 001 grid, gallery, open call          |
+| `/about`   | The charter, as a photocopied internal memo                    |
+| `/gallery` | Photographs of the runs — empty until the first filing ships   |
+| `/soon`    | "In Production" holding page — where every unbuilt link lands   |
+| `/account` | Member record: sign-in, certificate preview, order history     |
+| `/admin`   | Back of house: orders, filings, members, submissions           |
 
 ## Layout
 
@@ -228,6 +260,8 @@ src/
     layout.tsx              fonts, ambient layer, drawer provider
     globals.css             design tokens, reset, distress utilities
     page.tsx                storefront
+    about/                  the charter + Memo
+    gallery/                photo grid, empty for now
     soon/                   holding page
     account/                member record + SignInPanel
     admin/                  AdminConsole (gate + tabbed panes)
@@ -238,7 +272,8 @@ src/
       Overlays              film grain + scanlines
       Drawer, DrawerProvider, Masthead, Ticker, Footer
     store/                  storefront sections
-      Hero, Memo, FilingGrid, Collective, OpenCall
+      Hero, FilingGrid, Gallery, OpenCall
+      Collective            parked — returns before launch
     ui/                     reusable primitives
       Button, Field, Panel, Certificate, EmptyState, IconButton, Layout
   lib/
