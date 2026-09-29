@@ -75,7 +75,7 @@ async function seed() {
 }
 
 function anon() { return testEnv.unauthenticatedContext().firestore(); }
-function member(uid) { return testEnv.authenticatedContext(uid, { role: "customer" }).firestore(); }
+function member(uid) { return testEnv.authenticatedContext(uid, { role: "member" }).firestore(); }
 function staff(uid) { return testEnv.authenticatedContext(uid, { role: "staff" }).firestore(); }
 // Signed up a moment ago: the Cloud Function has not set the role claim yet.
 function noClaim(uid) { return testEnv.authenticatedContext(uid).firestore(); }
@@ -136,7 +136,7 @@ await check("a member cannot vote twice in the same filing (create-vs-update on 
 
 await check("a member cannot write their own role", async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), "users/u5"), { role: "customer", email: "u5@example.com" });
+    await setDoc(doc(ctx.firestore(), "users/u5"), { role: "member", email: "u5@example.com" });
   });
   await assertFails(updateDoc(doc(member("u5"), "users/u5"), { role: "owner" }));
 });
@@ -150,6 +150,13 @@ await check("counters are never client-readable or client-writable", async () =>
     await setDoc(doc(ctx.firestore(), "counters/certificates"), { value: 0 });
   });
   await assertFails(getDoc(doc(staff("s1"), "counters/certificates")));
+});
+
+await check("skus are never client-readable or client-writable", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "skus/DGN-001-M-BLK"), { productId: "p-live" });
+  });
+  await assertFails(getDoc(doc(staff("s1"), "skus/DGN-001-M-BLK")));
 });
 
 // ---------------- submissions: what a public create may carry ----------------

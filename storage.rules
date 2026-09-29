@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// Product images are written only by the uploadProductImage Cloud Function,
+// through the Admin SDK, which bypasses these rules. So nothing here grants a
+// client anything yet. Public read access to product images belongs with the
+// storefront-reads migration, where it can follow the same visibility windows
+// firestore.rules applies to the products themselves.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

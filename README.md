@@ -89,20 +89,41 @@ key was tolerable.
 
 The data layer is moving from D1 to Firestore, and hosting from Workers to
 Firebase App Hosting, so web, iOS and Android can share one backend. Nothing
-in the app reads Firestore yet; what exists so far is the security model.
+in the app reads or writes Firestore yet. What exists so far is the security
+model and the Cloud Functions that write the catalogue; the admin console
+still calls the D1 Server Actions in `src/lib/db/admin.ts`.
 
 - `firestore.rules` — who may read and write each collection. Clients read
   directly; every business-logic write (filings, products, orders,
-  certificates, counters) is denied to clients and left to Cloud Functions.
-- `rules.test.mjs` — proves the rules against the real Firestore emulator:
+  certificates, counters, skus) is denied to clients and left to Cloud
+  Functions.
+- `functions/` — the Cloud Functions, a package of its own with its own
+  `package.json` and build (`npm --prefix functions install` once). Five
+  callables mirror the catalogue actions in `admin.ts` — `createFiling`,
+  `updateFilingStatus` (owner only), `createProduct`, `createVariant`,
+  `uploadProductImage` — and `onUserCreate` gives every new account the
+  `member` role claim. Filings are keyed by their padded number, products by
+  slug and variants by `size_color`, so Firestore's own "already exists" is
+  the uniqueness check; SKUs, unique across all products, get a `skus/{sku}`
+  lookup written in the same transaction. A filing cannot go live until it
+  has both a member-access and a public date — nothing sets those yet in the
+  console.
+- `storage.rules` — deny-all for now; product images are written only by
+  `uploadProductImage`, through the Admin SDK.
+- `scripts/promote-role.mjs` — the only way to give an account the `staff` or
+  `owner` role: `node scripts/promote-role.mjs <uid-or-email> <staff|owner>`.
+  The person needs a fresh token (sign out and in) to see it.
+- `rules.test.mjs` and `functions.test.mjs` — prove the rules, and the
+  functions end to end, against the real emulators:
 
   ```bash
   npm run test:rules
+  npm run test:functions
   ```
 
-  The emulator is a Java program: this needs **JDK 21** on `PATH` (for
-  example `winget install Microsoft.OpenJDK.21`). It runs against the
-  `demo-degen-inc` project id, so it needs no Firebase login and touches no
+  The emulators are Java programs: these need **JDK 21** on `PATH` (for
+  example `winget install Microsoft.OpenJDK.21`). They run against the
+  `demo-degen-inc` project id, so they need no Firebase login and touch no
   real project.
 - `apphosting.yaml` — App Hosting backend settings (instance cap). The
   backend itself is connected from the Firebase console once the project

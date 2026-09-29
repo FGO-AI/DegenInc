@@ -70,7 +70,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && request.auth.uid == uid
                     && !('role' in request.resource.data.diff(resource.data).affectedKeys());
       allow create: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.role == 'customer';
+                    && request.resource.data.role == 'member';
       allow delete: if false;
     }
 
@@ -126,6 +126,16 @@ service cloud.firestore {
     }
 
     match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
+    // ---------------- skus ----------------
+    // Global uniqueness lookup for variants.sku: unlike slug and (size,color),
+    // there is no natural parent to hang a doc id off for a constraint that
+    // spans every product. Written only inside the same transaction as the
+    // variant it belongs to, by a Cloud Function. Same shape as counters: no
+    // client, staff included, ever reads or writes this directly.
+    match /skus/{sku} {
       allow read, write: if false;
     }
 

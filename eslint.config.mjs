@@ -18,6 +18,11 @@ const eslintConfig = defineConfig([
     ".open-next/**",
     ".wrangler/**",
     "cloudflare-env.d.ts",
+    // Cloud Functions: a separate package with its own tsconfig, build and
+    // dependencies, installed on its own. The app's build never installs
+    // functions/node_modules, so linting or type-checking it from here would
+    // fail on imports only that package can resolve.
+    "functions/**",
   ]),
 ]);
 
