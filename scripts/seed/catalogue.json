@@ -1,0 +1,312 @@
+{
+  "filings": [
+    {
+      "key": "fil_001",
+      "number": 1,
+      "title": "Filing 001",
+      "status": "closed",
+      "memberAccessAt": "2025-12-30T00:00:00.000Z",
+      "publicAt": "2026-01-01T00:00:00.000Z",
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "key": "c8d3b2ba-d135-4dfd-91af-e0181925cc05",
+      "number": 2,
+      "title": "Night Shift",
+      "status": "closed",
+      "memberAccessAt": null,
+      "publicAt": null,
+      "createdAt": "2026-09-24T16:33:26.776Z"
+    },
+    {
+      "key": "2d5f099a-0f14-4015-a8a5-1474aaf4636b",
+      "number": 3,
+      "title": "Day Shift",
+      "status": "closed",
+      "memberAccessAt": null,
+      "publicAt": null,
+      "createdAt": "2026-09-24T16:33:30.042Z"
+    },
+    {
+      "key": "4e41fc3e-5479-43c9-9107-d80283906ef5",
+      "number": 4,
+      "title": "Graveyard Shift",
+      "status": "live",
+      "memberAccessAt": null,
+      "publicAt": null,
+      "createdAt": "2026-09-24T16:54:21.300Z"
+    }
+  ],
+  "products": [
+    {
+      "key": "prd_01",
+      "filing": "fil_001",
+      "slug": "against-the-grain-tee",
+      "name": "Against The Grain",
+      "kind": "Tee",
+      "description": "Heavyweight cotton, discharge print.",
+      "priceCents": 4500,
+      "position": 0,
+      "createdAt": "2025-12-30T00:00:00.000Z",
+      "images": []
+    },
+    {
+      "key": "prd_02",
+      "filing": "fil_001",
+      "slug": "on-fitting-in-tee",
+      "name": "On Fitting In",
+      "kind": "Tee",
+      "description": "The charter, printed on the back.",
+      "priceCents": 4500,
+      "position": 1,
+      "createdAt": "2025-12-30T00:00:00.000Z",
+      "images": []
+    },
+    {
+      "key": "prd_03",
+      "filing": "fil_001",
+      "slug": "void-stamp-hood",
+      "name": "Void Stamp",
+      "kind": "Hood",
+      "description": "Heavyweight fleece, embroidered seal.",
+      "priceCents": 9000,
+      "position": 2,
+      "createdAt": "2025-12-30T00:00:00.000Z",
+      "images": []
+    },
+    {
+      "key": "1d97263d-4384-433f-88ad-609ff9a17578",
+      "filing": "c8d3b2ba-d135-4dfd-91af-e0181925cc05",
+      "slug": "night-shift-tee",
+      "name": "Night Shift Tee",
+      "kind": "Tee",
+      "description": null,
+      "priceCents": 4850,
+      "position": 0,
+      "createdAt": "2026-09-24T16:33:27.307Z",
+      "images": [
+        {
+          "file": "night-shift-tee.jpg",
+          "alt": null,
+          "position": 0
+        }
+      ]
+    },
+    {
+      "key": "be8ef61f-a63b-4c50-97ed-16d5f3470f0f",
+      "filing": "c8d3b2ba-d135-4dfd-91af-e0181925cc05",
+      "slug": "night-shift-hood",
+      "name": "Night Shift Hood",
+      "kind": "Hood",
+      "description": null,
+      "priceCents": 9500,
+      "position": 1,
+      "createdAt": "2026-09-24T16:33:29.455Z",
+      "images": []
+    },
+    {
+      "key": "2efc12f2-6b40-4664-8857-22fb6e576218",
+      "filing": "4e41fc3e-5479-43c9-9107-d80283906ef5",
+      "slug": "graveyard-tee",
+      "name": "Graveyard Tee",
+      "kind": "Tee",
+      "description": null,
+      "priceCents": 5200,
+      "position": 0,
+      "createdAt": "2026-09-24T16:54:21.578Z",
+      "images": []
+    },
+    {
+      "key": "9b7f5f8e-18ab-4914-8311-3325c0b95c05",
+      "filing": "4e41fc3e-5479-43c9-9107-d80283906ef5",
+      "slug": "graveyard-hood",
+      "name": "Graveyard Hood",
+      "kind": "Hood",
+      "description": null,
+      "priceCents": 9500,
+      "position": 1,
+      "createdAt": "2026-09-24T17:08:49.761Z",
+      "images": [
+        {
+          "file": "night-shift-tee.jpg",
+          "alt": null,
+          "position": 0
+        }
+      ]
+    },
+    {
+      "key": "e130df5f-9750-4721-90d6-ffa1c59a2dbf",
+      "filing": "4e41fc3e-5479-43c9-9107-d80283906ef5",
+      "slug": "graveyard-shift-long-sleeve",
+      "name": "Graveyard Shift Long Sleeve",
+      "kind": "Long Sleeve",
+      "description": null,
+      "priceCents": 6000,
+      "position": 2,
+      "createdAt": "2026-09-24T17:08:51.876Z",
+      "images": [
+        {
+          "file": "graveyard-shift-long-sleeve.jpg",
+          "alt": null,
+          "position": 0
+        }
+      ]
+    },
+    {
+      "key": "754e900c-36e9-4c9a-81fb-a6c2d2f8bd34",
+      "filing": "4e41fc3e-5479-43c9-9107-d80283906ef5",
+      "slug": "graveyard-cap",
+      "name": "Graveyard Cap",
+      "kind": "Cap",
+      "description": null,
+      "priceCents": 3000,
+      "position": 3,
+      "createdAt": "2026-09-24T17:08:52.964Z",
+      "images": []
+    },
+    {
+      "key": "b1a91a26-e6ca-49ee-9de7-bb1d2e1f79e5",
+      "filing": "4e41fc3e-5479-43c9-9107-d80283906ef5",
+      "slug": "graveyard-socks",
+      "name": "Graveyard Socks",
+      "kind": "Socks",
+      "description": null,
+      "priceCents": 1200,
+      "position": 4,
+      "createdAt": "2026-09-24T17:09:47.730Z",
+      "images": []
+    }
+  ],
+  "variants": [
+    {
+      "product": "prd_01",
+      "size": "S",
+      "color": "Black",
+      "sku": "DGN-001-S-BLK",
+      "stock": 10,
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "product": "prd_01",
+      "size": "M",
+      "color": "Black",
+      "sku": "DGN-001-M-BLK",
+      "stock": 0,
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "product": "prd_01",
+      "size": "L",
+      "color": "Black",
+      "sku": "DGN-001-L-BLK",
+      "stock": 7,
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "product": "prd_02",
+      "size": "M",
+      "color": "Bone",
+      "sku": "DGN-002-M-BON",
+      "stock": 5,
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "product": "prd_03",
+      "size": "L",
+      "color": "Black",
+      "sku": "DGN-003-L-BLK",
+      "stock": 1,
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    },
+    {
+      "product": "1d97263d-4384-433f-88ad-609ff9a17578",
+      "size": "M",
+      "color": "Black",
+      "sku": "DGN-002-M-BLK",
+      "stock": 6,
+      "createdAt": "2026-09-24T16:33:27.564Z"
+    },
+    {
+      "product": "be8ef61f-a63b-4c50-97ed-16d5f3470f0f",
+      "size": "L",
+      "color": "Black",
+      "sku": "DGN-002-L-BLK",
+      "stock": 3,
+      "createdAt": "2026-09-24T16:33:29.722Z"
+    },
+    {
+      "product": "1d97263d-4384-433f-88ad-609ff9a17578",
+      "size": "L",
+      "color": "Black",
+      "sku": "DGN-002-TEE-L-BLK",
+      "stock": 0,
+      "createdAt": "2026-09-24T16:54:20.185Z"
+    },
+    {
+      "product": "1d97263d-4384-433f-88ad-609ff9a17578",
+      "size": "M",
+      "color": "White",
+      "sku": "DGN-002-TEE-M-WHT",
+      "stock": 3,
+      "createdAt": "2026-09-24T16:54:20.510Z"
+    },
+    {
+      "product": "1d97263d-4384-433f-88ad-609ff9a17578",
+      "size": "L",
+      "color": "White",
+      "sku": "DGN-002-TEE-L-WHT",
+      "stock": 2,
+      "createdAt": "2026-09-24T16:54:20.991Z"
+    },
+    {
+      "product": "2efc12f2-6b40-4664-8857-22fb6e576218",
+      "size": "S",
+      "color": "Black",
+      "sku": "DGN-004-S-BLK",
+      "stock": 5,
+      "createdAt": "2026-09-24T16:54:21.869Z"
+    },
+    {
+      "product": "9b7f5f8e-18ab-4914-8311-3325c0b95c05",
+      "size": "L",
+      "color": "Black",
+      "sku": "DGN-004-HOOD-L-BLK",
+      "stock": 4,
+      "createdAt": "2026-09-24T17:08:50.269Z"
+    },
+    {
+      "product": "e130df5f-9750-4721-90d6-ffa1c59a2dbf",
+      "size": "M",
+      "color": "Black",
+      "sku": "DGN-004-LS-M-BLK",
+      "stock": 0,
+      "createdAt": "2026-09-24T17:08:52.126Z"
+    },
+    {
+      "product": "754e900c-36e9-4c9a-81fb-a6c2d2f8bd34",
+      "size": "OS",
+      "color": "Black",
+      "sku": "DGN-004-CAP-OS-BLK",
+      "stock": 0,
+      "createdAt": "2026-09-24T17:08:53.256Z"
+    },
+    {
+      "product": "b1a91a26-e6ca-49ee-9de7-bb1d2e1f79e5",
+      "size": "OS",
+      "color": "Black",
+      "sku": "DGN-004-SOCK-OS-BLK",
+      "stock": 9,
+      "createdAt": "2026-09-24T17:09:48.040Z"
+    }
+  ],
+  "submissions": [
+    {
+      "name": "KEROSENE",
+      "contact": "@kerosene",
+      "workUrl": "https://example.com/kerosene",
+      "note": "Flash sheet, twelve designs.",
+      "status": "new",
+      "createdAt": "2025-12-30T00:00:00.000Z"
+    }
+  ]
+}
