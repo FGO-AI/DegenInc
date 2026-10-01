@@ -27,7 +27,7 @@ import { claimingUnique } from "./unique";
  * visible.
  */
 export const createFiling = onCall(async (request) => {
-  requireStaff(request);
+  await requireStaff(request);
 
   return attempt(async () => {
     const data = request.data ?? {};
@@ -102,7 +102,7 @@ const PREVIOUS: Record<FilingStatus, FilingStatus | null> = {
  * as separate updates that could drift").
  */
 export const updateFilingStatus = onCall(async (request) => {
-  requireOwner(request);
+  await requireOwner(request);
 
   return attempt(async () => {
     const data = request.data ?? {};

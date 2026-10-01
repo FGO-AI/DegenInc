@@ -18,7 +18,7 @@ import { claimingUnique } from "./unique";
  * variantKeys/{productId}_{size}_{color}.
  */
 export const createVariant = onCall(async (request) => {
-  requireStaff(request);
+  await requireStaff(request);
 
   return attempt(async () => {
     const data = request.data ?? {};

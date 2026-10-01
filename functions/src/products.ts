@@ -13,7 +13,7 @@ import { claimingUnique } from "./unique";
  * digits and single dashes.
  */
 export const createProduct = onCall(async (request) => {
-  requireStaff(request);
+  await requireStaff(request);
 
   return attempt(async () => {
     const data = request.data ?? {};

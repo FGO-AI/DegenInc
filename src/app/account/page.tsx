@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Cols, Eyebrow, Section, Wrap, cx } from "@/components/ui/Layout";
 import { Panel } from "@/components/ui/Panel";
 import { getSession } from "@/lib/auth/guards";
+import { SessionSync } from "@/lib/auth/SessionSync";
 import { getMemberRecord, type MemberOrder } from "@/lib/db/queries";
 import { money, stamp } from "@/lib/format";
 import { SignInPanel } from "./SignInPanel";
@@ -34,7 +35,14 @@ const LOCKED = "Sign in to view";
  */
 export default async function AccountPage() {
   const session = await getSession();
-  if (!session) return <SignedOut />;
+  if (!session) {
+    return (
+      <>
+        <SessionSync uid={null} />
+        <SignedOut />
+      </>
+    );
+  }
 
   const record = await getMemberRecord();
 
@@ -48,6 +56,7 @@ export default async function AccountPage() {
 
   return (
     <>
+      <SessionSync uid={session.id} />
       <Masthead
         name="Member Record"
         sub={displayName}

@@ -24,7 +24,7 @@ import { MAX_IMAGE_BYTES, sniffImageType, extensionFor } from "./imageSniff";
  * side.
  */
 export const uploadProductImage = onCall(async (request) => {
-  requireStaff(request);
+  await requireStaff(request);
 
   return attempt(async () => {
     const data = request.data ?? {};

@@ -40,6 +40,8 @@ ui-debug.log*
 .env*
 # ...but the template holds no secrets and should be committed.
 !.env.example
+# ...nor does the emulator config `next dev` loads: demo project ids only.
+!.env.development
 
 # vercel
 .vercel

@@ -13,10 +13,10 @@ type Mode = "signin" | "signup";
 /**
  * Member sign-in and enrolment.
  *
- * Talks to /api/auth/*, never to the database — there is no public database
- * endpoint. The `role` column is deliberately not settable from here; Better
- * Auth is configured with `input: false` on it, so a crafted sign-up payload
- * cannot make anyone staff.
+ * Signs in with Firebase Authentication in the browser, then hands the ID token
+ * to /api/session for the server's cookie (src/lib/auth/client.ts). Nothing
+ * here can set a role: roles are custom claims, which only the Admin SDK sets,
+ * so a crafted sign-up cannot make anyone staff.
  */
 export function SignInPanel() {
   const [mode, setMode] = useState<Mode>("signin");
@@ -36,13 +36,13 @@ export function SignInPanel() {
 
     const { error } =
       mode === "signup"
-        ? await signUp.email({ email, password, name })
-        : await signIn.email({ email, password });
+        ? await signUp({ email, password, name })
+        : await signIn({ email, password });
 
     setPending(false);
 
     if (error) {
-      setStatus(error.message ?? "That did not work.");
+      setStatus(error);
       return;
     }
 

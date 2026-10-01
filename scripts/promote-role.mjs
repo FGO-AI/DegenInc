@@ -12,8 +12,11 @@
 // the project id. Run under `firebase emulators:exec` it talks to the
 // emulators instead, which set their own hosts and project id.
 //
-// The person has to sign out and back in (or the app has to call
-// getIdToken(true)) before the new role is in their token.
+// It also revokes the account's tokens, which signs the person out everywhere:
+// their session cookie stops verifying, and their next Cloud Function call is
+// refused. That is what makes a role change take effect at once — demoting
+// someone must not leave them five more days of an old cookie, or an hour of
+// an old token. They sign in again, and that new sign-in carries the new role.
 
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
@@ -36,8 +39,9 @@ const user = identifier.includes("@")
 
 // setCustomUserClaims() replaces every claim, so carry the others over.
 await auth.setCustomUserClaims(user.uid, { ...user.customClaims, role });
+await auth.revokeRefreshTokens(user.uid);
 // The users doc mirrors the claim for anything that lists accounts; the claim
 // is what rules and functions actually check.
 await db.collection("users").doc(user.uid).set({ role }, { merge: true });
 
-console.log(`${user.email ?? user.uid} is now ${role}. They need a fresh token to see it.`);
+console.log(`${user.email ?? user.uid} is now ${role}, and signed out everywhere. Their next sign-in carries the new role.`);

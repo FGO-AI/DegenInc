@@ -18,7 +18,12 @@ import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getStorage as getAdminStorage } from "firebase-admin/storage";
 import { initializeApp } from "firebase/app";
-import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
+import {
+  connectAuthEmulator,
+  createUserWithEmailAndPassword,
+  getAuth,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
 const PROJECT = process.env.GCLOUD_PROJECT ?? "demo-degen-inc";
@@ -74,11 +79,31 @@ async function waitFor(label, probe, ms = 20000) {
 const settled = (uid) =>
   waitFor(`onUserCreate for ${uid}`, async () => (await admin.db.doc(`users/${uid}`).get()).exists);
 
-/** Promotes through the real script, the way the owner would, then refreshes the token. */
-async function promote(account, role) {
+/**
+ * Changes a role through the real script, the way the owner would. The script
+ * also revokes the account's tokens. Firebase records both a revocation and a
+ * sign-in to the second, and counts a token revoked only if its sign-in is
+ * strictly earlier — so a sign-in in the same second as the revocation
+ * survives it. Waiting into the next second first keeps that from deciding the
+ * test.
+ */
+async function setRole(account, role) {
+  await new Promise((r) => setTimeout(r, 1100));
   await run(process.execPath, ["scripts/promote-role.mjs", account.email, role], { env: process.env });
-  await account.user.getIdToken(true);
 }
+
+/**
+ * Promotes, then signs in again: the script revokes the account's tokens, so
+ * the only way to a token carrying the new role is a fresh sign-in.
+ */
+async function promote(account, role) {
+  await setRole(account, role);
+  ({ user: account.user } = await signInWithEmailAndPassword(account.auth, account.email, "password-123"));
+}
+
+/** Gets past the staff guard and stops at validation: proves the caller is staff, writes nothing. */
+const pastTheGuard = (account) => account.call("createFiling", { number: 0, title: "Guard check" });
+const GUARD_PASSED = "Filing number must be a whole number from 1 to 999.";
 
 let pass = 0, fail = 0;
 async function check(label, fn) {
@@ -161,18 +186,35 @@ await check("a member is refused a staff-only function (permission-denied)", asy
   await denied(member.call("createFiling", { number: 900, title: "Nope" }), "permission-denied");
 });
 
-await check("a promotion only takes effect once the token is refreshed", async () => {
+await check("a promotion revokes the old token at once, and the next sign-in carries the new role", async () => {
   staff = await signUp("staff@example.com");
   await settled(staff.uid);
-  await staff.user.getIdToken(); // the member token, cached
-  await run(process.execPath, ["scripts/promote-role.mjs", staff.email, "staff"], { env: process.env });
-  // Same cached token: still member as far as the function can tell.
-  await denied(staff.call("createFiling", { number: 901, title: "Too soon" }), "permission-denied");
-  await staff.user.getIdToken(true);
+  await staff.user.getIdToken(); // the member token, cached and unexpired
+  await setRole(staff, "staff");
+  // The cached token has most of its hour left, but it was revoked: refused.
+  await denied(pastTheGuard(staff), "unauthenticated");
+  // In production a revoked refresh token cannot be refreshed at all; the
+  // Auth emulator still allows it. Either way a refreshed token is refused,
+  // because it still carries the sign-in from before the revocation — and
+  // that is the property the guard relies on.
+  await staff.user.getIdToken(true).catch(() => {});
+  await denied(pastTheGuard(staff), "unauthenticated");
+  // A fresh sign-in is the way back, and it carries the new role.
+  ({ user: staff.user } = await signInWithEmailAndPassword(staff.auth, staff.email, "password-123"));
+  refused(await pastTheGuard(staff), GUARD_PASSED);
   const record = await admin.auth.getUser(staff.uid);
   assert(record.customClaims?.role === "staff", `claim is ${JSON.stringify(record.customClaims)}`);
   const docRole = (await data(`users/${staff.uid}`))?.role;
   assert(docRole === "staff", `users doc role is ${docRole}`);
+});
+
+await check("a demoted staff member is refused at once, not when their token expires", async () => {
+  const leaving = await signUp("leaving@example.com");
+  await settled(leaving.uid);
+  await promote(leaving, "staff");
+  refused(await pastTheGuard(leaving), GUARD_PASSED);
+  await setRole(leaving, "member");
+  await denied(pastTheGuard(leaving), "unauthenticated");
 });
 
 owner = await signUp("owner@example.com");
