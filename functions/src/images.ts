@@ -28,7 +28,7 @@ export const uploadProductImage = onCall(async (request) => {
 
   return attempt(async () => {
     const data = request.data ?? {};
-    const slug = reference(data.productId, "Product");
+    const productId = reference(data.productId, "Product");
     if (typeof data.fileBase64 !== "string" || !data.fileBase64) {
       throw new Rejected("Choose an image to upload.");
     }
@@ -41,12 +41,14 @@ export const uploadProductImage = onCall(async (request) => {
     const type = sniffImageType(bytes);
     if (!type) throw new Rejected("That file is not a JPEG, PNG, WebP, AVIF or GIF.");
 
-    const productRef = db.collection("products").doc(slug);
+    const productRef = db.collection("products").doc(productId);
     const productSnap = await productRef.get();
     if (!productSnap.exists) throw new Rejected("That product no longer exists.");
 
+    // reference() lets only [A-Za-z0-9_-] through, so the product id is safe
+    // as a path segment, and the image route can read it back out of the key.
     const id = crypto.randomUUID();
-    const path = `products/${slug}/${id}.${extensionFor(type)}`;
+    const path = `products/${productId}/${id}.${extensionFor(type)}`;
 
     const file = storage.bucket().file(path);
     await file.save(bytes, { contentType: type, resumable: false });

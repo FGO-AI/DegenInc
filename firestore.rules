@@ -101,15 +101,27 @@ service cloud.firestore {
       // in the same write as the filing, so they cannot drift apart.
       allow read: if isVisible(resource.data.filingStatus, resource.data) || isStaff();
       allow write: if false;
+    }
 
-      // A variant is exactly as visible as its product, time windows included:
-      // sizes and stock for a product still in its members' window are not
-      // public either. The one get() reads the product's own copies, the
-      // same fields its read rule uses.
-      match /variants/{variantId} {
-        allow read: if productIsVisible(productId) || isStaff();
-        allow write: if false;
-      }
+    // ---------------- variants ----------------
+    // Top level, not under products: the bag and checkout know a variant by
+    // its id alone, so the id is unique on its own and the product it belongs
+    // to is a field, productId.
+    //
+    // A variant is exactly as visible as its product, time windows included:
+    // sizes and stock for a product still in its members' window are not
+    // public either. The one get() reads the product's own copies, the same
+    // fields its read rule uses — found through resource.data.productId.
+    //
+    // QUERIES MUST FILTER ON productId. A query is allowed only if the rule
+    // holds for every document it could return, and for get() to know which
+    // product to read, the query has to pin productId with
+    // where("productId", "==", id). A variant query without that filter is
+    // refused, even when every variant it would return is public. Staff are
+    // the exception: isStaff() holds without reading any product.
+    match /variants/{variantId} {
+      allow read: if productIsVisible(resource.data.productId) || isStaff();
+      allow write: if false;
     }
 
     // ---------------- orders / certificates / counters ----------------
@@ -129,13 +141,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // ---------------- skus ----------------
-    // Global uniqueness lookup for variants.sku: unlike slug and (size,color),
-    // there is no natural parent to hang a doc id off for a constraint that
-    // spans every product. Written only inside the same transaction as the
-    // variant it belongs to, by a Cloud Function. Same shape as counters: no
-    // client, staff included, ever reads or writes this directly.
+    // ---------------- uniqueness lookups ----------------
+    // One document per unique value, its id the value itself: a filing number,
+    // a product slug, a SKU, a product's size and colour. Each is created with
+    // create() in the same transaction as the record that owns the value, and
+    // create() fails if the document already exists — that is what keeps the
+    // value unique. Written and read only by the Cloud Functions; no client,
+    // staff included, touches them.
+    match /filingNumbers/{number} {
+      allow read, write: if false;
+    }
+
+    match /slugs/{slug} {
+      allow read, write: if false;
+    }
+
     match /skus/{sku} {
+      allow read, write: if false;
+    }
+
+    match /variantKeys/{key} {
       allow read, write: if false;
     }
 

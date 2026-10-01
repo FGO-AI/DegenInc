@@ -102,12 +102,14 @@ still calls the D1 Server Actions in `src/lib/db/admin.ts`.
   callables mirror the catalogue actions in `admin.ts` — `createFiling`,
   `updateFilingStatus` (owner only), `createProduct`, `createVariant`,
   `uploadProductImage` — and `onUserCreate` gives every new account the
-  `member` role claim. Filings are keyed by their padded number, products by
-  slug and variants by `size_color`, so Firestore's own "already exists" is
-  the uniqueness check; SKUs, unique across all products, get a `skus/{sku}`
-  lookup written in the same transaction. A filing cannot go live until it
-  has both a member-access and a public date — nothing sets those yet in the
-  console.
+  `member` role claim. Filings, products and variants get random ids;
+  variants are a top-level collection with a `productId` field, because the
+  bag and checkout know a variant by its id alone. Each unique value — a
+  filing number, a slug, a SKU, a product's size and colour — has a lookup
+  document (`filingNumbers`, `slugs`, `skus`, `variantKeys`) created with
+  `create()` in the same transaction as its record, so a duplicate fails. A
+  filing cannot go live until it has both a member-access and a public date —
+  nothing sets those yet in the console.
 - `storage.rules` — deny-all for now; product images are written only by
   `uploadProductImage`, through the Admin SDK.
 - `scripts/promote-role.mjs` — the only way to give an account the `staff` or

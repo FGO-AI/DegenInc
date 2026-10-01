@@ -45,13 +45,13 @@ export function wholeNumber(
 }
 
 /**
- * An id the client is pointing at. Every id in this scheme is either a slug
- * (products), a padded number (filings), or a doc-id built by docIdFrom()
- * (variants, skus) — all of which match this shape, so anything outside it
- * is refused outright rather than sent to Firestore.
+ * An id the client is pointing at. Every filing, product and variant id is a
+ * Firestore auto-id (20 letters and digits) or a seeded one like fil_001, so
+ * anything outside [A-Za-z0-9_-] is refused outright rather than sent to
+ * Firestore. Whether the document exists is each function's own check.
  */
 export function reference(value: unknown, label: string): string {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,1500}$/.test(value)) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
     throw new Rejected(`${label} is missing or malformed.`);
   }
   return value;

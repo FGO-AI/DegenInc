@@ -10,16 +10,13 @@ import {
   pad,
 } from "./validation";
 import type { FilingStatus } from "./types";
+import { claimingUnique } from "./unique";
 
 /**
  * Mirrors src/lib/db/admin.ts's createFiling() (lines 54-85).
  *
- * Doc id = the padded filing number, not a random id — the same reasoning as
- * slug-as-id for products (products.ts): Firestore's own "the doc already
- * exists" failure on create() IS the uniqueness constraint, matching D1's
- * UNIQUE on filings.number with no read-then-check needed. Nothing elsewhere
- * depends on filing ids being opaque (votes and products just store
- * whatever string this is).
+ * The filing gets a random id; its number, unique as it was in D1, is held by
+ * a filingNumbers/{number} lookup created in the same transaction (unique.ts).
  *
  * publicAt/memberAccessAt are accepted as optional inputs here. D1 never
  * sets these anywhere in the app — confirmed by grep, they exist only as
@@ -42,27 +39,30 @@ export const createFiling = onCall(async (request) => {
       throw new Rejected("Member access cannot start after the public date.");
     }
 
-    const filingId = pad(number);
-    const filingRef = db.collection("filings").doc(filingId);
+    const filingRef = db.collection("filings").doc();
+    const numberRef = db.collection("filingNumbers").doc(pad(number));
+    const taken = `Filing ${pad(number)} already exists.`;
 
-    const filing = await db.runTransaction(async (t) => {
-      const snap = await t.get(filingRef);
-      if (snap.exists) throw new Rejected(`Filing ${pad(number)} already exists.`);
+    const filing = await claimingUnique({ filingNumbers: taken }, () =>
+      db.runTransaction(async (t) => {
+        if ((await t.get(numberRef)).exists) throw new Rejected(taken);
 
-      const doc = {
-        number,
-        title,
-        status: "draft" as const,
-        ...(publicAt ? { publicAt } : {}),
-        ...(memberAccessAt ? { memberAccessAt } : {}),
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      };
-      t.create(filingRef, doc);
-      return doc;
-    });
+        const doc = {
+          number,
+          title,
+          status: "draft" as const,
+          ...(publicAt ? { publicAt } : {}),
+          ...(memberAccessAt ? { memberAccessAt } : {}),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        t.create(numberRef, { filingId: filingRef.id });
+        t.create(filingRef, doc);
+        return doc;
+      }),
+    );
 
-    return { id: filingId, number: filing.number, title: filing.title, status: filing.status, products: [] };
+    return { id: filingRef.id, number: filing.number, title: filing.title, status: filing.status, products: [] };
   });
 });
 

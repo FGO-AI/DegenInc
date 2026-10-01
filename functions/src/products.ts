@@ -2,17 +2,15 @@ import { onCall } from "firebase-functions/v2/https";
 import { db, FieldValue } from "./firebase";
 import { requireStaff, attempt, Rejected } from "./guards";
 import { words, optionalWords, reference, SLUG } from "./validation";
+import { claimingUnique } from "./unique";
 
 /**
  * Mirrors src/lib/db/admin.ts's createProduct() (lines 186-248).
  *
- * Doc id = the slug, not a random id. Gets uniqueness for free from
- * create()'s exists-check inside the transaction (Firestore aborts/retries
- * on a concurrent create to the same id, same as D1's UNIQUE on
- * products.slug failing a statement) and matches the existing
- * {filingId}_{memberId} pattern already used for votes. Confirmed nothing
- * else in the codebase references products by a non-slug id — orders/
- * order_items only ever store variantId plus denormalized snapshots.
+ * The product gets a random id; its slug, unique as it was in D1, is held by a
+ * slugs/{slug} lookup created in the same transaction (unique.ts). The slug is
+ * safe as a document id as it stands: SLUG allows only lowercase letters,
+ * digits and single dashes.
  */
 export const createProduct = onCall(async (request) => {
   requireStaff(request);
@@ -33,7 +31,9 @@ export const createProduct = onCall(async (request) => {
     }
 
     const filingRef = db.collection("filings").doc(filingId);
-    const productRef = db.collection("products").doc(slug);
+    const productRef = db.collection("products").doc();
+    const slugRef = db.collection("slugs").doc(slug);
+    const taken = `The slug "${slug}" is already taken.`;
 
     // Next slot on the grid. Read outside the transaction and tolerated as
     // loose under concurrent creates, same as D1's correlated-subquery
@@ -43,35 +43,38 @@ export const createProduct = onCall(async (request) => {
     const countSnap = await db.collection("products").where("filingId", "==", filingId).count().get();
     const position = countSnap.data().count;
 
-    const record = await db.runTransaction(async (t) => {
-      const [filingSnap, productSnap] = await Promise.all([t.get(filingRef), t.get(productRef)]);
-      if (!filingSnap.exists) throw new Rejected("That filing no longer exists.");
-      if (productSnap.exists) throw new Rejected(`The slug "${slug}" is already taken.`);
-      const filing = filingSnap.data()!;
+    const record = await claimingUnique({ slugs: taken }, () =>
+      db.runTransaction(async (t) => {
+        const [filingSnap, slugSnap] = await Promise.all([t.get(filingRef), t.get(slugRef)]);
+        if (!filingSnap.exists) throw new Rejected("That filing no longer exists.");
+        if (slugSnap.exists) throw new Rejected(taken);
+        const filing = filingSnap.data()!;
 
-      const doc = {
-        filingId,
-        slug,
-        name,
-        kind,
-        description,
-        priceCents,
-        position,
-        // Denormalized snapshot of the PARENT FILING'S CURRENT state, copied
-        // at creation time — matches D1: a product added to an already-live
-        // filing is immediately part of the live catalog, no separate review
-        // gate.
-        filingStatus: filing.status,
-        ...(filing.publicAt ? { publicAt: filing.publicAt } : {}),
-        ...(filing.memberAccessAt ? { memberAccessAt: filing.memberAccessAt } : {}),
-        images: [] as unknown[],
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      };
-      t.create(productRef, doc);
-      return doc;
-    });
+        const doc = {
+          filingId,
+          slug,
+          name,
+          kind,
+          description,
+          priceCents,
+          position,
+          // Denormalized snapshot of the PARENT FILING'S CURRENT state, copied
+          // at creation time — matches D1: a product added to an already-live
+          // filing is immediately part of the live catalog, no separate review
+          // gate.
+          filingStatus: filing.status,
+          ...(filing.publicAt ? { publicAt: filing.publicAt } : {}),
+          ...(filing.memberAccessAt ? { memberAccessAt: filing.memberAccessAt } : {}),
+          images: [] as unknown[],
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        t.create(slugRef, { productId: productRef.id });
+        t.create(productRef, doc);
+        return doc;
+      }),
+    );
 
-    return { id: slug, slug, name: record.name, kind: record.kind, priceCents: record.priceCents, variants: [], images: [] };
+    return { id: productRef.id, slug, name: record.name, kind: record.kind, priceCents: record.priceCents, variants: [], images: [] };
   });
 });
