@@ -11,6 +11,7 @@
 // reuse the last build.
 
 import { execFile, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { initializeApp as initAdmin } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
@@ -405,6 +406,119 @@ await check("a key the product does not list, or of the wrong shape, is a 404 fo
     const res = await image(path, staff.cookie);
     assert(res.status === 404, `${path} answered ${res.status}`);
   }
+});
+
+// ---------------- Step 5: checkout, as one Firestore transaction ----------------
+
+// The bag page's own Server Action, called the way the page calls it: a POST
+// to /cart naming the action. It is the only action in the app, so the build's
+// manifest has exactly one entry, under app/cart/page.
+const actions = JSON.parse(readFileSync(".next/server/server-reference-manifest.json", "utf8")).node;
+const purchaseCartId = Object.keys(actions).find((id) => Object.keys(actions[id].workers ?? {}).includes("app/cart/page"));
+async function purchaseCart(cookie, items) {
+  const res = await fetch(`${BASE}/cart`, {
+    method: "POST",
+    headers: { "next-action": purchaseCartId, "content-type": "text/plain;charset=UTF-8", accept: "text/x-component", cookie },
+    body: JSON.stringify([items]),
+  });
+  const body = await res.text();
+  const result = body.match(/\{"ok":(?:true|false)[^}]*\}/);
+  if (!result) throw new Error(`no result from the action: ${res.status} ${body.slice(0, 200)}`);
+  return JSON.parse(result[0]);
+}
+const checkout = (cookie, variantId, quantity = 1) =>
+  fetch(`${BASE}/api/checkout`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    body: JSON.stringify({ variantId, quantity }),
+  });
+const stockOf = async (variantId) => (await admin.db.doc(`variants/${variantId}`).get()).get("stock");
+const ordersOf = async (memberId) => (await admin.db.collection("orders").where("memberId", "==", memberId).get()).docs;
+
+// X is still live and in its members' window. Two variants: the last one of
+// M, for the race, and ten of L.
+const xLast = await staff.call("createVariant", { productId: xTee.id, size: "M", color: "Black", sku: "X-M-BLK", stock: 1 });
+const xMany = await staff.call("createVariant", { productId: xTee.id, size: "L", color: "Black", sku: "X-L-BLK", stock: 10 });
+const rival = await enrol("rival@example.com", "Rival");
+await waitFor("the rival's users doc", async () => (await admin.db.doc(`users/${rival.uid}`).get()).exists);
+
+await check("a member checks out through the bag's own action: one order, its lines inside it, stock taken off", async () => {
+  const result = await purchaseCart(member.cookie, [{ variantId: xMany.id, quantity: 2 }]);
+  assert(result.ok === true && result.orderId, JSON.stringify(result));
+  const order = (await admin.db.doc(`orders/${result.orderId}`).get()).data();
+  assert(order.memberId === member.uid && order.status === "pending" && order.totalCents === 6800, JSON.stringify(order));
+  const [line] = order.items;
+  assert(order.items.length === 1 && line.variantId === xMany.id && line.quantity === 2 && line.unitPriceCents === 3400,
+    JSON.stringify(order.items));
+  assert(line.nameSnapshot === "X Tee" && line.variantSnapshot === "L / Black", JSON.stringify(line));
+  assert((await stockOf(xMany.id)) === 8, `stock is ${await stockOf(xMany.id)}`);
+  const record = await html("/account", member.cookie);
+  assert(record.body.includes("$68"), "the order is not on the member's record");
+});
+
+await check("two checkouts of the last one at the same instant: one order, one clean refusal, stock 0 not -1", async () => {
+  // Both requests go to one server at once, so their transactions run side by
+  // side; the timings in the log say whether they actually contended.
+  const started = Date.now();
+  const timed = (p) => p.then((r) => ({ r, ms: Date.now() - started }));
+  const raced = await Promise.all([timed(checkout(member.cookie, xLast.id)), timed(checkout(rival.cookie, xLast.id))]);
+  const responses = raced.map((x) => x.r);
+  const bodies = await Promise.all(responses.map((r) => r.json()));
+  console.log(`     checkout race: ${raced.map((x, i) => `${x.r.status} ${bodies[i]?.error ?? "ok"} in ${x.ms}ms`).join(", ")}`);
+  const statuses = responses.map((r) => r.status).sort();
+  assert(statuses[0] === 200 && statuses[1] === 409, `statuses ${statuses}, bodies ${JSON.stringify(bodies)}`);
+  assert(bodies.some((b) => b.error === "out_of_stock"), JSON.stringify(bodies));
+  assert((await stockOf(xLast.id)) === 0, `stock is ${await stockOf(xLast.id)}`);
+  const orders = (await admin.db.collection("orders").get()).docs.filter((o) => o.get("items").some((i) => i.variantId === xLast.id));
+  assert(orders.length === 1, `${orders.length} orders hold the last one`);
+});
+
+await check("an order of more than 25 different items is refused, and nothing is written", async () => {
+  const before = (await ordersOf(member.uid)).length;
+  const lines = Array.from({ length: 26 }, (_, i) => ({ variantId: `v${i}`, quantity: 1 }));
+  const result = await purchaseCart(member.cookie, lines);
+  assert(result.ok === false && result.error === "An order can hold up to 25 different items.", JSON.stringify(result));
+  assert((await ordersOf(member.uid)).length === before, "an order was written");
+});
+
+await check("a draft's variant is refused in the same words as one that does not exist", async () => {
+  const draft = await purchaseCart(member.cookie, [{ variantId: draftM.id, quantity: 1 }]);
+  const unknown = await purchaseCart(member.cookie, [{ variantId: "no-such-variant", quantity: 1 }]);
+  assert(draft.ok === false && draft.error === "Something in this order is no longer sold.", JSON.stringify(draft));
+  assert(unknown.ok === false && unknown.error === draft.error, JSON.stringify(unknown));
+  assert((await stockOf(draftM.id)) === 3, "the draft's stock moved");
+});
+
+await check("a signed-out caller cannot check out", async () => {
+  const res = await checkout(null, xMany.id);
+  assert(res.status === 401, `answered ${res.status}`);
+  assert((await stockOf(xMany.id)) === 8, "stock moved");
+});
+
+await check("a filing closed while its line is in the bag: shown unavailable, by name, and the order refused", async () => {
+  await owner.call("updateFilingStatus", { filingId: filingX.id, status: "closed" });
+  const [line] = await cart([xMany.id], member.cookie);
+  assert(line.available === false && line.productName === "X Tee", JSON.stringify(line));
+  const result = await purchaseCart(member.cookie, [{ variantId: xMany.id, quantity: 1 }]);
+  assert(result.ok === false && result.error.startsWith("Part of this order is from a filing that has closed"), JSON.stringify(result));
+  const res = await checkout(member.cookie, xMany.id);
+  assert(res.status === 409 && (await res.json()).error === "filing_closed", `answered ${res.status}`);
+  assert((await stockOf(xMany.id)) === 8, `stock is ${await stockOf(xMany.id)}`);
+});
+
+await check("before a member's window opens, a live filing's variant cannot be bought", async () => {
+  const early = await staff.call("createFiling", {
+    number: 13, title: "Not yet",
+    memberAccessAt: new Date(Date.now() + HOUR).toISOString(),
+    publicAt: new Date(Date.now() + 2 * HOUR).toISOString(),
+  });
+  const earlyTee = await staff.call("createProduct", { filingId: early.id, slug: "early-tee", name: "Early Tee", kind: "tee", priceCents: 3000 });
+  const earlyM = await staff.call("createVariant", { productId: earlyTee.id, size: "M", color: "Black", sku: "E-M-BLK", stock: 5 });
+  await owner.call("updateFilingStatus", { filingId: early.id, status: "scheduled" });
+  await owner.call("updateFilingStatus", { filingId: early.id, status: "live" });
+  const result = await purchaseCart(member.cookie, [{ variantId: earlyM.id, quantity: 1 }]);
+  assert(result.ok === false && result.error === "Something in this order is no longer sold.", JSON.stringify(result));
+  assert((await stockOf(earlyM.id)) === 5, "stock moved");
 });
 
 // ---------------- done ----------------

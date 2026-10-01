@@ -12,10 +12,11 @@
 // is mocked.
 
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { initializeApp as initAdmin } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
-import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getStorage as getAdminStorage } from "firebase-admin/storage";
 import { initializeApp } from "firebase/app";
 import {
@@ -581,6 +582,73 @@ await check("an upload for a product that does not exist is refused before anyth
   );
   const [files] = await admin.bucket.getFiles({ prefix: "products/no-such-tee/" });
   assert(files.length === 0, "an object was stored anyway");
+});
+
+// ---------------- certificates: issued for a paid order, never for an unpaid one ----------------
+// issueCertificate is not deployed yet — nothing marks an order paid until
+// Stripe exists — so it is called directly, from the built functions package.
+
+const { issueCertificate } = createRequire(import.meta.url)("./functions/lib/certificates.js");
+
+async function seedOrder(memberId, status) {
+  const ref = admin.db.collection("orders").doc();
+  await ref.set({ memberId, status, items: [], totalCents: 0, createdAt: FieldValue.serverTimestamp() });
+  return ref.id;
+}
+const counterValue = async () => (await data("counters/certificates"))?.value ?? 0;
+const outcome = (promise) => promise.then((r) => ({ ok: true, ...r }), (e) => ({ ok: false, error: e.message }));
+
+await check("an unpaid order is refused a certificate, and uses no number", async () => {
+  const before = await counterValue();
+  const result = await outcome(issueCertificate(await seedOrder("m-unpaid", "pending")));
+  assert(!result.ok && result.error === "Only a paid order is issued a certificate.", JSON.stringify(result));
+  assert((await counterValue()) === before, "the counter moved");
+  assert(!(await admin.db.doc("certificates/m-unpaid").get()).exists, "a certificate was written");
+});
+
+await check("a missing order is refused a certificate", async () => {
+  const result = await outcome(issueCertificate("no-such-order"));
+  assert(!result.ok && result.error === "There is no such order.", JSON.stringify(result));
+});
+
+await check("a paid order is issued the next number, and the counter moves by exactly one", async () => {
+  const before = await counterValue();
+  const orderId = await seedOrder("m-one", "paid");
+  const result = await issueCertificate(orderId);
+  assert(result.issued && result.number === before + 1, JSON.stringify(result));
+  const cert = await data("certificates/m-one");
+  assert(cert?.number === before + 1 && cert?.orderId === orderId && cert?.memberId === "m-one" && cert?.issuedAt, JSON.stringify(cert));
+  assert((await counterValue()) === before + 1, `the counter is ${await counterValue()}`);
+});
+
+await check("a member's second paid order gets the same certificate back, and uses no number", async () => {
+  const before = await counterValue();
+  const first = (await data("certificates/m-one")).number;
+  const result = await issueCertificate(await seedOrder("m-one", "paid"));
+  assert(!result.issued && result.number === first, JSON.stringify(result));
+  assert((await counterValue()) === before, "the counter moved");
+});
+
+await check("two members issued at the same instant get consecutive numbers: none shared, none skipped", async () => {
+  const before = await counterValue();
+  const [a, b] = await Promise.all([
+    issueCertificate(await seedOrder("m-a", "paid")),
+    issueCertificate(await seedOrder("m-b", "paid")),
+  ]);
+  const numbers = [a.number, b.number].sort((x, y) => x - y);
+  assert(a.issued && b.issued && numbers[0] === before + 1 && numbers[1] === before + 2, JSON.stringify({ a, b, before }));
+  assert((await counterValue()) === before + 2, `the counter is ${await counterValue()}`);
+});
+
+await check("one member's two paid orders issued at the same instant: one certificate, one number", async () => {
+  const before = await counterValue();
+  const [first, second] = await Promise.all([
+    issueCertificate(await seedOrder("m-c", "paid")),
+    issueCertificate(await seedOrder("m-c", "paid")),
+  ]);
+  assert([first, second].filter((r) => r.issued).length === 1, JSON.stringify({ first, second }));
+  assert(first.number === second.number && first.number === before + 1, JSON.stringify({ first, second, before }));
+  assert((await counterValue()) === before + 1, `the counter is ${await counterValue()}`);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

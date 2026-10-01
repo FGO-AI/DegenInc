@@ -156,6 +156,20 @@ await check("counters are never client-readable or client-writable", async () =>
   await assertFails(getDoc(doc(staff("s1"), "counters/certificates")));
 });
 
+// Checkout's writes: only the server writes stock, orders, their lines and the
+// certificate counter. order_items is not a collection — an order's lines live
+// inside it — so no rule names it, and default-deny has to cover it.
+for (const path of ["variants/v-live", "orders/o-new", "order_items/i-new", "counters/certificates"]) {
+  await check(`no client, staff included, can write ${path.split("/")[0]}`, async () => {
+    await assertFails(setDoc(doc(staff("s1"), path), { stock: 99, memberId: "s1", value: 0 }));
+    await assertFails(setDoc(doc(member("u1"), path), { stock: 99, memberId: "u1", value: 0 }));
+  });
+}
+
+await check("a member cannot change a variant's stock, even by one field", async () => {
+  await assertFails(updateDoc(doc(member("u1"), "variants/v-live"), { stock: 999 }));
+});
+
 // The four uniqueness lookups: Cloud Functions only, staff included.
 for (const path of ["filingNumbers/001", "slugs/night-shift-tee", "skus/DGN-001-M-BLK", "variantKeys/p-live_S_Black"]) {
   await check(`${path.split("/")[0]} are never client-readable or client-writable`, async () => {
