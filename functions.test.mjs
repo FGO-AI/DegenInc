@@ -249,7 +249,7 @@ await check("staff can create a filing, as a draft, with a random id, its two ti
   assert(lookup?.filingId === f1.id, `filingNumbers/001 is ${JSON.stringify(lookup)}`);
 });
 
-await check("a duplicate filing number is refused with the D1 console's own message", async () => {
+await check("a duplicate filing number is refused with the console's own message", async () => {
   refused(await staff.call("createFiling", { number: 1, title: "Again", memberAccessAt, publicAt }), "Filing 001 already exists.");
   assert((await count(admin.db.collection("filings").where("number", "==", 1))) === 1, "a second filing 001 was written");
 });
@@ -482,7 +482,7 @@ await check("going live writes the status and both times onto every product, in 
   assert((await data("state/currentFiling"))?.filingId === f3.id, "state/currentFiling does not point at filing 003");
 });
 
-await check("a product added to a filing that is already live is live at once, as in D1", async () => {
+await check("a product added to a filing that is already live is live at once, with no review step", async () => {
   lateTee = succeeded(await staff.call("createProduct", { filingId: f3.id, slug: "late-tee", name: "Late Tee", kind: "tee", priceCents: 3400 }));
   const p = await data(`products/${lateTee.id}`);
   const filing = await data(`filings/${f3.id}`);

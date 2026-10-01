@@ -13,9 +13,9 @@ import type { FilingStatus } from "./types";
 import { claimingUnique } from "./unique";
 
 /**
- * Mirrors the D1 console's createFiling(), plus the two times D1 never had.
+ * The console's createFiling(), with the two times every filing now needs.
  *
- * The filing gets a random id; its number, unique as it was in D1, is held by
+ * The filing gets a random id; its number, which must be unique, is held by
  * a filingNumbers/{number} lookup created in the same transaction (unique.ts).
  *
  * Both times are required, and the public one must come strictly after the
@@ -78,12 +78,12 @@ const PREVIOUS: Record<FilingStatus, FilingStatus | null> = {
 };
 
 /**
- * Mirrors the D1 console's updateFilingStatus().
+ * The console's updateFilingStatus().
  *
- * OWNER ONLY, same as D1 — "Taking a filing live is what puts it in front
+ * OWNER ONLY, as it always was — "Taking a filing live is what puts it in front
  * of customers."
  *
- * D1 enforces "one live filing" with a partial UNIQUE index, since a CHECK
+ * The old SQL schema held "one live filing" with a partial UNIQUE index; a CHECK
  * constraint can't see prior state. Firestore has no partial unique index,
  * so this reads `filings where status == 'live'` *inside* the transaction
  * before writing, and leans on Firestore's serializable isolation: two

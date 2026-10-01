@@ -5,9 +5,9 @@ import { words, optionalWords, reference, SLUG } from "./validation";
 import { claimingUnique } from "./unique";
 
 /**
- * Mirrors the D1 console's createProduct().
+ * The console's createProduct().
  *
- * The product gets a random id; its slug, unique as it was in D1, is held by a
+ * The product gets a random id; its slug, which must be unique, is held by a
  * slugs/{slug} lookup created in the same transaction (unique.ts). The slug is
  * safe as a document id as it stands: SLUG allows only lowercase letters,
  * digits and single dashes.
@@ -36,8 +36,7 @@ export const createProduct = onCall(async (request) => {
     const taken = `The slug "${slug}" is already taken.`;
 
     // Next slot on the grid. Read outside the transaction and tolerated as
-    // loose under concurrent creates, same as D1's correlated-subquery
-    // position: two products added at the same instant can share a position;
+    // loose under concurrent creates, as it always was: two products added at the same instant can share a position;
     // nothing breaks, the pair just sorts in whatever order Firestore
     // returns a tie.
     const countSnap = await db.collection("products").where("filingId", "==", filingId).count().get();
@@ -59,7 +58,7 @@ export const createProduct = onCall(async (request) => {
           priceCents,
           position,
           // Denormalized snapshot of the PARENT FILING'S CURRENT state, copied
-          // at creation time — matches D1: a product added to an already-live
+          // at creation time, as it always worked: a product added to an already-live
           // filing is immediately part of the live catalog, no separate review
           // gate.
           filingStatus: filing.status,

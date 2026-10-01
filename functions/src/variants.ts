@@ -5,14 +5,14 @@ import { words, wholeNumber, reference, docIdFrom } from "./validation";
 import { claimingUnique } from "./unique";
 
 /**
- * Mirrors the D1 console's createVariant().
+ * The console's createVariant().
  *
  * Variants live in the top-level variants collection under a random id, with
  * the product they belong to in productId. The bag, /api/cart and checkout
  * know a variant by its id alone, so the id has to be unique on its own, not
  * only within one product.
  *
- * Two of D1's constraints carry over, each held by a lookup document created
+ * Two of the old SQL schema's constraints carry over, each held by a lookup document created
  * in the same transaction (unique.ts): the SKU, unique across every product,
  * in skus/{sku}; and the product's size and colour, unique within it, in
  * variantKeys/{productId}_{size}_{color}.

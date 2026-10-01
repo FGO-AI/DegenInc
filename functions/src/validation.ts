@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { Rejected } from "./guards";
 
-// Ported from the D1 console's validation helpers — same
+// Ported from the console's original validation helpers — same
 // validation, same messages, so a staffer sees no difference in what a bad
 // input tells them.
 
@@ -80,8 +80,8 @@ export function optionalTimestamp(value: unknown, label: string): Timestamp | un
 
 /**
  * Builds a Firestore document id out of one or more parts, joined with "_" —
- * the same shape as the existing votes/{filingId}_{memberId} pattern. Not in
- * D1: there, size/color/sku were just text columns. Here they become (part
+ * the same shape as the existing votes/{filingId}_{memberId} pattern. In the
+ * old SQL schema size/color/sku were just text columns. Here they become (part
  * of) a literal document id, which Firestore restricts more than a text
  * column ever was — this is what enforces that.
  */

@@ -40,7 +40,7 @@ function toCells(products: FilingSlot[]): Cell[] {
   return cells;
 }
 
-/** Server Component. Reads D1 directly — the browser never queries the database. */
+/** Server Component. Reads Firestore on the server — the browser never queries the database for this. */
 export async function FilingGrid() {
   const live = await getLiveFilingSafe();
   const products = live?.slots ?? [];
@@ -74,9 +74,9 @@ export async function FilingGrid() {
                     alt stays for a photo that fails to load. */}
                 <div className={cx(styles.frame, "rough")} aria-hidden="true">
                   {cell.product.imageKey ? (
-                    // Plain <img>, not next/image: the optimiser needs a
-                    // Cloudflare Images binding this app deliberately skips.
-                    // See src/lib/images.ts.
+                    // Plain <img>, not next/image: /images/... decides per
+                    // request who may see an image, and the optimiser would
+                    // serve its own cached copy to anyone.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       className={styles.photo}

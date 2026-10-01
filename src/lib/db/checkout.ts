@@ -9,7 +9,7 @@ import { isVisible, viewerOf } from "@/lib/visibility";
 /**
  * Stock-reserving checkout, as one Firestore transaction.
  *
- * Firestore has nothing like D1's CHECK (stock >= 0), so correctness comes from
+ * Firestore has nothing like SQL's CHECK (stock >= 0), so correctness comes from
  * the transaction instead. It reads every variant in the order and the product
  * each belongs to; decides, on those freshly read values, whether every line is
  * live, visible to this buyer and in stock; and only then writes — every

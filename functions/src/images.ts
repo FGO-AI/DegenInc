@@ -6,22 +6,21 @@ import { reference } from "./validation";
 import { MAX_IMAGE_BYTES, sniffImageType, extensionFor } from "./imageSniff";
 
 /**
- * Mirrors the D1 console's uploadProductImage(), with
- * Cloud Storage for Firebase in place of R2.
+ * The console's uploadProductImage(), storing to Cloud Storage for Firebase.
  *
  * A callable's only input mode is JSON, so the file travels as base64 rather
  * than FormData: {productId, fileBase64}. 2nd-gen callables accept up to
  * 32MB per request (10MB on 1st-gen) — an 8MB image becomes ~11MB
  * base64-encoded, comfortably inside that.
  *
- * Object first, doc second — same order and same reasoning as D1's version:
- * the reverse order would leave a doc pointing at bytes that never arrived.
+ * Object first, doc second: the reverse order would leave a doc pointing at
+ * bytes that never arrived.
  * On a doc-write failure after a successful object write, best-effort
  * deletes the object. Not guaranteed (can itself fail, or the function can
- * die before reaching it) — same accepted, documented, non-correctness-
- * affecting gap as the D1 version: an orphaned object costs storage, not
- * correctness, and the sweep to reconcile them does not exist on either
- * side.
+ * die before reaching it) — an accepted, documented, non-correctness-
+ * affecting gap: an orphaned object costs storage, not correctness, and a
+ * sweep to reconcile the bucket against product documents does not exist
+ * yet.
  */
 export const uploadProductImage = onCall(async (request) => {
   await requireStaff(request);

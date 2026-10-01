@@ -63,7 +63,7 @@ service cloud.firestore {
     // createdAt is the server's clock, never the client's: the client sends
     // serverTimestamp(), which arrives here as exactly request.time. A missing
     // field fails the comparison, so this also makes createdAt required, as
-    // it was NOT NULL in D1 — where the server filled it in, never the client.
+    // it was NOT NULL in the old SQL schema, where the server filled it in.
     function isCreatedNow() {
       return request.resource.data.createdAt == request.time;
     }
@@ -176,7 +176,7 @@ service cloud.firestore {
     // SQL schema used a unique constraint on (filing_id, member_id).
     //
     // A vote is for an open-call submission, not a product (votes.submission_id
-    // in the D1 schema). Submissions carry no filingId, so "this submission
+    // in the old SQL schema). Submissions carry no filingId, so "this submission
     // belongs to this filing" cannot be checked; the stand-in is that the
     // submission exists and staff have approved it.
     match /votes/{voteId} {
@@ -196,7 +196,7 @@ service cloud.firestore {
     // legitimately sends: exactly these fields, arriving as 'new'. The review
     // fields (reviewedBy, reviewedAt) and every other status are staff's to
     // set, through allow update. name, contact, workUrl and createdAt are
-    // required, as they were NOT NULL in the D1 schema; note is optional.
+    // required, as they were NOT NULL in the old SQL schema; note is optional.
     match /submissions/{submissionId} {
       allow create: if request.resource.data.keys().hasOnly(['name', 'contact', 'workUrl', 'note', 'status', 'createdAt'])
                     && request.resource.data.keys().hasAll(['name', 'contact', 'workUrl', 'status', 'createdAt'])
