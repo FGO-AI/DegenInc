@@ -1,38 +1,62 @@
 import "server-only";
 
 import { connection } from "next/server";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { Timestamp, type DocumentData, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 import {
+  getSession,
   requireMember,
   requireStaff,
   type SessionUser,
 } from "@/lib/auth/guards";
 import { MAX_LINES, VARIANT_ID } from "@/lib/cart/limits";
-import { getDb } from "./index";
-import {
-  certificates,
-  filings,
-  orderItems,
-  orders,
-  productImages,
-  products,
-  variants,
-  votes,
-} from "./schema";
+import { adminDb } from "@/lib/firebase/admin";
+import { isVisible, viewerOf } from "@/lib/visibility";
 
 /**
  * Server-only data access layer.
  *
- * Under Supabase, RLS meant the database itself refused to return rows the
- * caller should not see, so a leaked query was still safe. D1 has no such
- * thing: it returns whatever it is asked for. Authorization is therefore
- * application code, and it lives here.
+ * Everything here reads Firestore through the Admin SDK, which BYPASSES
+ * firestore.rules: the database will hand back anything it is asked for.
+ * Authorization is therefore application code, and it lives here.
  *
  * The rule for this file: every function that touches member or staff data
  * calls a guard from src/lib/auth/guards.ts FIRST. Functions that are
  * genuinely public — the live filing, a product page — say so in a comment,
- * so "no guard" is always a decision rather than an oversight.
+ * so "no guard" is always a decision rather than an oversight. And whatever
+ * decides whether a filing or product can be seen goes through isVisible()
+ * in src/lib/visibility.ts, the server's copy of the rule firestore.rules
+ * applies to everyone else.
  */
+
+export type FilingStatus = "draft" | "scheduled" | "live" | "closed";
+
+/** Firestore's cap on the values in one `in` filter. */
+const IN_LIMIT = 30;
+
+/** Every document whose `field` is one of `values`, a query per 30 of them. */
+async function whereIn(
+  collection: string,
+  field: string,
+  values: string[],
+): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+  const db = adminDb();
+  const chunks: string[][] = [];
+  for (let i = 0; i < values.length; i += IN_LIMIT) chunks.push(values.slice(i, i + IN_LIMIT));
+  const snaps = await Promise.all(
+    chunks.map((chunk) => db.collection(collection).where(field, "in", chunk).get()),
+  );
+  return snaps.flatMap((s) => s.docs);
+}
+
+const millis = (t: unknown): number => (t instanceof Timestamp ? t.toMillis() : 0);
+
+type StoredImage = { id: string; path: string; alt?: string | null; position?: number };
+
+/** A product document's images, in position order. */
+function imagesOf(product: DocumentData): StoredImage[] {
+  const list = Array.isArray(product.images) ? (product.images as StoredImage[]) : [];
+  return [...list].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+}
 
 export type FilingSlot = {
   id: string;
@@ -43,113 +67,82 @@ export type FilingSlot = {
   /** Sum of stock across every variant. 0 means sold out. */
   stock: number;
   /**
-   * R2 key of the primary image (position 0), served at /images/<key>. Null
-   * until one is uploaded; the grid shows its text placeholder instead.
+   * Storage path of the primary image (position 0), served at /images/<path>.
+   * Null until one is uploaded; the grid shows its text placeholder instead.
    */
   imageKey: string | null;
 };
 
 /**
- * PUBLIC BY DESIGN. The live filing and its products are the storefront;
- * anyone can read them, signed in or not.
+ * PUBLIC BY DESIGN. The live filing and its products are the storefront —
+ * to whoever may see them now. During a members' window that is signed-in
+ * members only; before it, nobody but staff. Someone who may not see the live
+ * filing gets null, the same as when nothing is live, and the grid shows its
+ * placeholders.
  *
- * Note this reads through D1 read replicas, which can serve slightly stale
- * data. That is fine for displaying stock on a grid. It is NOT fine for the
- * checkout write path, which must go through the primary and rely on the
- * stock CHECK constraint rather than on a number it read a moment ago.
+ * The live filing is found through state/currentFiling, the pointer the
+ * filing-status function keeps, rather than by scanning filings.
  */
 export async function getLiveFiling() {
-  // Excludes the storefront from prerendering.
-  //
-  // Without this the page is rendered at BUILD time, where no D1 binding
-  // exists — getLiveFilingSafe() swallows the failure, and the "awaiting
-  // asset" placeholders get baked into a static page that then serves
-  // forever, whatever the database actually holds. Stock counts have to be
-  // read per request.
+  // Excludes the storefront from prerendering: stock and visibility have to be
+  // read per request, never baked into a static page at build time.
   await connection();
 
-  const db = getDb();
+  const db = adminDb();
+  const viewer = viewerOf(await getSession());
 
-  const [filing] = await db
-    .select()
-    .from(filings)
-    .where(eq(filings.status, "live"))
-    .orderBy(asc(filings.number))
-    .limit(1);
+  const pointer = (await db.doc("state/currentFiling").get()).data();
+  if (typeof pointer?.filingId !== "string") return null;
 
-  if (!filing) return null;
+  const filingSnap = await db.doc(`filings/${pointer.filingId}`).get();
+  const f = filingSnap.data();
+  if (!f || f.status !== "live" || !isVisible(f.status, f, viewer)) return null;
 
-  const rows = await db
-    .select()
-    .from(products)
-    .where(eq(products.filingId, filing.id))
-    .orderBy(asc(products.position));
+  const filing = {
+    id: filingSnap.id,
+    number: f.number as number,
+    title: f.title as string,
+    status: f.status as FilingStatus,
+  };
 
-  if (rows.length === 0) return { filing, slots: [] as FilingSlot[] };
+  // Each product carries its own copies of the filing's status and times, and
+  // they are what decides it — as in the rules.
+  const productSnaps = (
+    await db.collection("products").where("filingId", "==", filing.id).get()
+  ).docs
+    .filter((p) => isVisible(p.get("filingStatus"), p.data(), viewer))
+    .sort((a, b) => (a.get("position") ?? 0) - (b.get("position") ?? 0) || millis(a.get("createdAt")) - millis(b.get("createdAt")));
 
-  const productIds = rows.map((p) => p.id);
+  if (productSnaps.length === 0) return { filing, slots: [] as FilingSlot[] };
 
-  // One extra query each rather than N: every variant for these products, to
-  // total the stock in memory, and every primary image. Both depend only on
-  // the product ids, so they run side by side rather than one after the other.
-  const [variantRows, imageRows] = await Promise.all([
-    db
-      .select({
-        productId: variants.productId,
-        stock: variants.stock,
-      })
-      .from(variants)
-      .where(inArray(variants.productId, productIds)),
-
-    db
-      .select({
-        productId: productImages.productId,
-        r2Key: productImages.r2Key,
-      })
-      .from(productImages)
-      .where(
-        and(
-          inArray(productImages.productId, productIds),
-          eq(productImages.position, 0),
-        ),
-      ),
-  ]);
-
+  // One extra read rather than N: every variant for these products, to total
+  // the stock in memory.
   const stockByProduct = new Map<string, number>();
-  for (const v of variantRows) {
-    stockByProduct.set(v.productId, (stockByProduct.get(v.productId) ?? 0) + v.stock);
+  for (const v of await whereIn("variants", "productId", productSnaps.map((p) => p.id))) {
+    const productId = v.get("productId") as string;
+    stockByProduct.set(productId, (stockByProduct.get(productId) ?? 0) + (v.get("stock") ?? 0));
   }
 
-  // Two uploads landing at the same instant can both take position 0 (see
-  // uploadProductImage). Keep the first one seen rather than letting the last
-  // overwrite it; either is a real photo of the product.
-  const imageByProduct = new Map<string, string>();
-  for (const img of imageRows) {
-    if (!imageByProduct.has(img.productId)) {
-      imageByProduct.set(img.productId, img.r2Key);
-    }
-  }
-
-  const slots: FilingSlot[] = rows.map((p) => ({
-    id: p.id,
-    slug: p.slug,
-    name: p.name,
-    kind: p.kind,
-    priceCents: p.priceCents,
-    stock: stockByProduct.get(p.id) ?? 0,
-    imageKey: imageByProduct.get(p.id) ?? null,
-  }));
+  const slots: FilingSlot[] = productSnaps.map((p) => {
+    const data = p.data();
+    return {
+      id: p.id,
+      slug: data.slug,
+      name: data.name,
+      kind: data.kind,
+      priceCents: data.priceCents,
+      stock: stockByProduct.get(p.id) ?? 0,
+      imageKey: imagesOf(data)[0]?.path ?? null,
+    };
+  });
 
   return { filing, slots };
 }
 
 /**
- * Same as getLiveFiling, but never throws.
- *
- * The storefront is prerendered at build time, where no D1 binding exists, and
- * it must also render on a machine that has not run migrations yet. In both
- * cases the page falls back to the "awaiting asset" placeholder slots, which
- * is the correct pre-launch design anyway.
+ * Same as getLiveFiling, but never throws: a machine with no emulator running,
+ * or a project with nothing in it yet, still renders the "awaiting asset"
+ * placeholder slots, which is the correct pre-launch design anyway.
  */
 export async function getLiveFilingSafe() {
   try {
@@ -172,7 +165,7 @@ export type ProductVariant = {
 };
 
 export type ProductImage = {
-  /** R2 object key, served at /images/<key>. */
+  /** Storage path, served at /images/<path>. */
   key: string;
   alt: string | null;
 };
@@ -195,10 +188,11 @@ export type ProductPage = {
  * PUBLIC BY DESIGN, for the same reason as getLiveFiling: a product on the
  * live filing is the storefront.
  *
- * Null unless the product's filing is live, which the query decides rather
- * than a check afterwards — a draft, scheduled or closed product, or one whose
- * filing was deleted, matches nothing. The page turns null into a 404, so an
- * unreleased slug looks exactly like one that was never used.
+ * Null unless the product's filing is live AND this viewer may see it now —
+ * so during the members' window an anonymous visitor gets null, and the page
+ * turns null into a real 404, exactly as for a slug that never existed. A
+ * closed product is visible under the rules, but has no page here: the page
+ * is a shop counter for what is on sale, as it always was.
  *
  * Variants come back unsummed. getLiveFiling totals them because the grid only
  * says "3 left"; a size picker has to know that M / Black is gone while
@@ -207,9 +201,6 @@ export type ProductPage = {
  * Explicit projections, as everywhere a result reaches a page: the variants
  * are handed to a client component, so whatever is selected here is in the
  * browser. SKUs are staff business and stay behind.
- *
- * Replica-served, so stock can be a moment stale — fine for a picker. The bag
- * page re-reads it, and checkout's constraints decide.
  */
 export async function getProductBySlug(
   slug: string,
@@ -217,47 +208,35 @@ export async function getProductBySlug(
   // Request-time read — see getLiveFiling() for why this has to come first.
   await connection();
 
-  const db = getDb();
+  const db = adminDb();
+  const viewer = viewerOf(await getSession());
 
-  const [product] = await db
-    .select({
-      id: products.id,
-      slug: products.slug,
-      name: products.name,
-      kind: products.kind,
-      description: products.description,
-      priceCents: products.priceCents,
-      filingNumber: filings.number,
-    })
-    .from(products)
-    .innerJoin(filings, eq(filings.id, products.filingId))
-    .where(and(eq(products.slug, slug), eq(filings.status, "live")))
-    .limit(1);
+  const [productSnap] = (
+    await db.collection("products").where("slug", "==", slug).limit(1).get()
+  ).docs;
+  const p = productSnap?.data();
+  if (!p || p.filingStatus !== "live" || !isVisible(p.filingStatus, p, viewer)) return null;
 
-  if (!product) return null;
-
-  // Both depend only on the product id, so they go side by side, as in
-  // getLiveFiling.
-  const [variantRows, imageRows] = await Promise.all([
-    db
-      .select({
-        id: variants.id,
-        size: variants.size,
-        color: variants.color,
-        stock: variants.stock,
-      })
-      .from(variants)
-      .where(eq(variants.productId, product.id))
-      .orderBy(asc(variants.createdAt)),
-
-    db
-      .select({ key: productImages.r2Key, alt: productImages.alt })
-      .from(productImages)
-      .where(eq(productImages.productId, product.id))
-      .orderBy(asc(productImages.position)),
+  const [filingSnap, variantSnaps] = await Promise.all([
+    db.doc(`filings/${p.filingId}`).get(),
+    db.collection("variants").where("productId", "==", productSnap.id).get(),
   ]);
+  const filingNumber = filingSnap.get("number");
+  if (typeof filingNumber !== "number") return null;
 
-  return { ...product, images: imageRows, variants: variantRows };
+  return {
+    id: productSnap.id,
+    slug: p.slug,
+    name: p.name,
+    kind: p.kind,
+    description: p.description ?? null,
+    priceCents: p.priceCents,
+    filingNumber,
+    images: imagesOf(p).map((image) => ({ key: image.path, alt: image.alt ?? null })),
+    variants: variantSnaps.docs
+      .sort((a, b) => millis(a.get("createdAt")) - millis(b.get("createdAt")))
+      .map((v) => ({ id: v.id, size: v.get("size"), color: v.get("color"), stock: v.get("stock") })),
+  };
 }
 
 /* -------------------------------------------------------------------------
@@ -280,8 +259,9 @@ export type CartLineDetail = {
 };
 
 /**
- * Anything else — a variant whose filing was never published, or no such
- * variant at all. Nothing to show but the id that was asked about.
+ * Anything else — a variant whose filing was never published, one this viewer
+ * may not see yet, or no such variant at all. Nothing to show but the id that
+ * was asked about.
  */
 export type CartLineHidden = { variantId: string; available: false };
 
@@ -297,17 +277,17 @@ export type CartLine = CartLineDetail | CartLineHidden;
  * *now* — today's price, today's stock — rather than what was true when each
  * went in.
  *
- * Public stops at what has been public. A variant on a live filing comes back
- * in full. One on a closed filing was on sale once, so it still comes back in
- * full, marked unavailable — whoever had it in their bag when the drop ended
- * can see what it was. Anything else, draft and scheduled filings included,
- * comes back as a bare { variantId, available: false }: no name, no price.
- * An id that matches nothing gets that same bare row rather than being left
- * out, so the answer cannot be used to find out which unreleased ids exist.
+ * Public stops at what this viewer may see. A variant on a live filing, inside
+ * the viewer's window, comes back in full. One on a closed filing was on sale
+ * once, so it still comes back in full, marked unavailable — whoever had it in
+ * their bag when the drop ended can see what it was. Anything else — draft and
+ * scheduled filings, a live one before this viewer's window opens — comes back
+ * as a bare { variantId, available: false }: no name, no price. An id that
+ * matches nothing gets that same bare row rather than being left out, so the
+ * answer cannot be used to find out which unreleased ids exist.
  *
- * Replica-served, like getLiveFiling, so stock or status can be a moment
- * stale. That is fine for showing someone what is wrong with their bag. It is
- * not what decides the order: checkout's constraints do, on the primary.
+ * This shows someone what is wrong with their bag. It is not what decides the
+ * order: checkout re-reads everything inside its transaction.
  *
  * The input is whatever a browser sent, so it is filtered to well-formed ids
  * and capped before it reaches the query. One line comes back per id kept.
@@ -321,32 +301,32 @@ export async function getCartDetails(variantIds: string[]): Promise<CartLine[]> 
     .slice(0, MAX_LINES);
   if (ids.length === 0) return [];
 
-  const rows = await getDb()
-    .select({
-      variantId: variants.id,
-      productName: products.name,
-      size: variants.size,
-      color: variants.color,
-      priceCents: products.priceCents,
-      stock: variants.stock,
-      // Left join: a product whose filing was deleted has none, and gets the
-      // bare row below like any other never-public variant.
-      status: filings.status,
-    })
-    .from(variants)
-    .innerJoin(products, eq(products.id, variants.productId))
-    .leftJoin(filings, eq(filings.id, products.filingId))
-    .where(inArray(variants.id, ids));
+  const db = adminDb();
+  const viewer = viewerOf(await getSession());
 
-  const byId = new Map(rows.map((r) => [r.variantId, r]));
+  const variantSnaps = await db.getAll(...ids.map((id) => db.doc(`variants/${id}`)));
+  const productIds = [...new Set(variantSnaps.filter((v) => v.exists).map((v) => v.get("productId") as string))];
+  const productSnaps = productIds.length
+    ? await db.getAll(...productIds.map((id) => db.doc(`products/${id}`)))
+    : [];
+  const products = new Map(productSnaps.filter((p) => p.exists).map((p) => [p.id, p.data()!]));
 
-  return ids.map((variantId): CartLine => {
-    const row = byId.get(variantId);
-    if (!row || (row.status !== "live" && row.status !== "closed")) {
+  return ids.map((variantId, i): CartLine => {
+    const v = variantSnaps[i].data();
+    const p = v ? products.get(v.productId) : undefined;
+    const status = p?.filingStatus;
+    if (!v || !p || (status !== "live" && status !== "closed") || !isVisible(status, p, viewer)) {
       return { variantId, available: false };
     }
-    const { status, ...line } = row;
-    return { ...line, available: status === "live" };
+    return {
+      variantId,
+      available: status === "live",
+      productName: p.name,
+      size: v.size,
+      color: v.color,
+      priceCents: p.priceCents,
+      stock: v.stock,
+    };
   });
 }
 
@@ -359,7 +339,7 @@ const ORDER_LIMIT = 50;
 
 export type MemberOrderLine = {
   name: string;
-  /** "M / Black". Null on lines written before variant_snapshot existed. */
+  /** "M / Black". */
   variant: string | null;
   quantity: number;
   unitPriceCents: number;
@@ -373,7 +353,7 @@ export type MemberOrder = {
   lines: MemberOrderLine[];
 };
 
-/** Null until issuance exists. Nothing writes to `certificates` yet. */
+/** Null until the member's first paid order is issued a certificate. */
 export type MemberCertificate = {
   number: number;
   class: string;
@@ -387,115 +367,86 @@ export type MemberRecord = {
   votesCast: number;
 };
 
+type StoredLine = {
+  nameSnapshot: string;
+  variantSnapshot?: string | null;
+  quantity: number;
+  unitPriceCents: number;
+};
+
 /**
  * Everything /account renders for the signed-in member.
  *
- * GUARDED. requireMember() runs first and the user id comes from the verified
- * session — never from a parameter, because there is no parameter. Under RLS a
- * leaked id was survivable; here it would just hand back someone else's orders.
+ * GUARDED. requireMember() runs first and the member id comes from the
+ * verified session — never from a parameter, because there is no parameter.
+ * The Admin SDK would hand back anyone's orders for any id it was given.
  *
- * Note the projections are explicit rather than a select(). Whatever a server
- * component returns is serialised into the RSC payload and shipped to the
- * browser, and select() on `orders` would put stripePaymentIntentId and the
- * shippingAddress JSON in there. Neither is rendered; neither should leave the
- * worker.
+ * Note the projections are explicit rather than the documents as stored.
+ * Whatever a server component returns is serialised into the RSC payload and
+ * shipped to the browser, and an order document carries a shipping address
+ * and, once Stripe exists, a payment id. Neither is rendered; neither should
+ * leave the server.
  *
- * Two round trips, not four: the first three reads are independent, so they go
- * in one db.batch(). Line items need the order ids, so they follow. A batch
- * also runs against the primary rather than a read replica, which is what we
- * want anyway — a member who just checked out must see their own order.
+ * One round trip: the certificate, the orders and the vote count are
+ * independent, so they are read side by side. An order's lines live inside the
+ * order document, so they come with it.
  */
 export async function getMemberRecord(): Promise<MemberRecord> {
-  // Guard before any query, per the rule at the top of this file. This also
+  // Guard before any read, per the rule at the top of this file. This also
   // calls connection() transitively, so the route stays out of the prerender.
   const me = await requireMember();
 
-  const db = getDb();
+  const db = adminDb();
 
-  const [certRows, orderRows, voteRows] = await db.batch([
-    // certificates.userId is UNIQUE — at most one per member, forever.
+  const [certSnap, orderSnaps, votes] = await Promise.all([
+    // Keyed by the member's id — at most one per member, forever.
+    db.doc(`certificates/${me.id}`).get(),
+    // Needs the (memberId, createdAt desc) index in firestore.indexes.json.
     db
-      .select({
-        number: certificates.number,
-        class: certificates.class,
-        issuedAt: certificates.issuedAt,
-      })
-      .from(certificates)
-      .where(eq(certificates.userId, me.id))
-      .limit(1),
-
-    // `currency` is deliberately not selected. money() hardcodes $ and en-US,
-    // so carrying a currency column we then ignore is how a euro amount ends
-    // up printed with a dollar sign.
-    db
-      .select({
-        id: orders.id,
-        status: orders.status,
-        totalCents: orders.totalCents,
-        placedAt: orders.createdAt,
-      })
-      .from(orders)
-      .where(eq(orders.userId, me.id))
-      .orderBy(desc(orders.createdAt))
-      .limit(ORDER_LIMIT),
-
-    db.select({ n: count() }).from(votes).where(eq(votes.userId, me.id)),
+      .collection("orders")
+      .where("memberId", "==", me.id)
+      .orderBy("createdAt", "desc")
+      .limit(ORDER_LIMIT)
+      .get(),
+    db.collection("votes").where("memberId", "==", me.id).count().get(),
   ]);
 
-  // One extra query rather than N, same shape as getLiveFiling above. Skipped
-  // entirely when there is nothing to look up — inArray over an empty list is
-  // a query with no useful answer.
-  const lineRows = orderRows.length
-    ? await db
-        .select({
-          orderId: orderItems.orderId,
-          name: orderItems.nameSnapshot,
-          variant: orderItems.variantSnapshot,
-          quantity: orderItems.quantity,
-          unitPriceCents: orderItems.unitPriceCents,
-        })
-        .from(orderItems)
-        .where(
-          inArray(
-            orderItems.orderId,
-            orderRows.map((o) => o.id),
-          ),
-        )
-        // Otherwise SQLite returns rowid order, which is insertion order and
-        // therefore an implementation detail. The variant breaks ties between
-        // two sizes of the same product.
-        .orderBy(asc(orderItems.nameSnapshot), asc(orderItems.variantSnapshot))
-    : [];
-
-  const linesByOrder = new Map<string, MemberOrderLine[]>();
-  for (const row of lineRows) {
-    const line = {
-      name: row.name,
-      variant: row.variant,
-      quantity: row.quantity,
-      unitPriceCents: row.unitPriceCents,
-    };
-    const list = linesByOrder.get(row.orderId);
-    if (list) list.push(line);
-    else linesByOrder.set(row.orderId, [line]);
-  }
+  const cert = certSnap.data();
 
   return {
     user: me,
-    certificate: certRows[0] ?? null,
-    orders: orderRows.map((o) => ({
-      ...o,
-      lines: linesByOrder.get(o.id) ?? [],
-    })),
-    votesCast: voteRows[0]?.n ?? 0,
+    certificate: cert
+      ? { number: cert.number, class: cert.class, issuedAt: (cert.issuedAt as Timestamp).toDate() }
+      : null,
+    orders: orderSnaps.docs.map((o) => {
+      const data = o.data();
+      // `currency` is deliberately left behind. money() hardcodes $ and en-US,
+      // so carrying a currency we then ignore is how a euro amount ends up
+      // printed with a dollar sign.
+      const lines = ((data.items ?? []) as StoredLine[])
+        .map((line) => ({
+          name: line.nameSnapshot,
+          variant: line.variantSnapshot ?? null,
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+        }))
+        // The variant breaks ties between two sizes of the same product.
+        .sort((a, b) => a.name.localeCompare(b.name) || (a.variant ?? "").localeCompare(b.variant ?? ""));
+      return {
+        id: o.id,
+        status: data.status,
+        totalCents: data.totalCents,
+        placedAt: (data.createdAt as Timestamp).toDate(),
+        lines,
+      };
+    }),
+    votesCast: votes.data().count,
   };
 }
 
 /* -------------------------------------------------------------------------
    Back of house: the catalogue
    ------------------------------------------------------------------------- */
-
-export type FilingStatus = (typeof filings.status.enumValues)[number];
 
 export type AdminVariant = {
   id: string;
@@ -507,7 +458,7 @@ export type AdminVariant = {
 
 export type AdminImage = {
   id: string;
-  /** R2 object key. The URL is /images/<key>, built where it is rendered. */
+  /** Storage path. The URL is /images/<path>, built where it is rendered. */
   r2Key: string;
 };
 
@@ -534,121 +485,65 @@ const FILING_LIMIT = 50;
 
 /**
  * Every filing the console manages, each with its products, their variants and
- * their images. The same shapes come back from the actions in ./admin.ts, so
- * the console can splice a created row straight into what it already holds.
+ * their images. The same shapes come back from the catalogue functions, so the
+ * console can splice a created row straight into what it already holds.
  *
- * GUARDED. requireStaff() runs before any query.
+ * GUARDED. requireStaff() runs before any read.
  *
  * connection() comes first, and explicitly, even though getSession() calls it
  * too: this is a request-time read, and keeping it out of the prerender must
- * not hinge on what a guard happens to do internally. getLiveFiling() says why
- * that matters.
+ * not hinge on what a guard happens to do internally.
  *
- * One round trip. Products, variants and images are scoped by subqueries over
- * the same window of filings rather than by ids read first, so all four reads
- * are independent and go in one db.batch() — which runs on the primary, so a
- * filing created a moment ago is there on reload.
- *
- * Images come back as keys rather than a count: the count is the list's
- * length, and the keys are what let the console show the thumbnails.
+ * Three reads, each depending on the one before: the filings, their products,
+ * those products' variants. Images live on the product documents. Ordering
+ * happens in memory, so no query here needs a composite index.
  */
 export async function getAdminCatalog(): Promise<AdminFiling[]> {
   await connection();
   await requireStaff();
 
-  const db = getDb();
+  const db = adminDb();
 
-  const recentFilings = db
-    .select({ id: filings.id })
-    .from(filings)
-    .orderBy(desc(filings.number))
-    .limit(FILING_LIMIT);
-
-  const theirProducts = db
-    .select({ id: products.id })
-    .from(products)
-    .where(inArray(products.filingId, recentFilings));
-
-  const [filingRows, productRows, variantRows, imageRows] = await db.batch([
-    db
-      .select({
-        id: filings.id,
-        number: filings.number,
-        title: filings.title,
-        status: filings.status,
-      })
-      .from(filings)
-      .orderBy(desc(filings.number))
-      .limit(FILING_LIMIT),
-
-    db
-      .select({
-        id: products.id,
-        filingId: products.filingId,
-        slug: products.slug,
-        name: products.name,
-        kind: products.kind,
-        priceCents: products.priceCents,
-      })
-      .from(products)
-      .where(inArray(products.filingId, recentFilings))
-      .orderBy(asc(products.position), asc(products.createdAt)),
-
-    db
-      .select({
-        id: variants.id,
-        productId: variants.productId,
-        size: variants.size,
-        color: variants.color,
-        sku: variants.sku,
-        stock: variants.stock,
-      })
-      .from(variants)
-      .where(inArray(variants.productId, theirProducts))
-      .orderBy(asc(variants.createdAt)),
-
-    db
-      .select({
-        id: productImages.id,
-        productId: productImages.productId,
-        r2Key: productImages.r2Key,
-      })
-      .from(productImages)
-      .where(inArray(productImages.productId, theirProducts))
-      .orderBy(asc(productImages.position)),
-  ]);
+  const filingSnaps = (
+    await db.collection("filings").orderBy("number", "desc").limit(FILING_LIMIT).get()
+  ).docs;
+  const productSnaps = (await whereIn("products", "filingId", filingSnaps.map((f) => f.id))).sort(
+    (a, b) => (a.get("position") ?? 0) - (b.get("position") ?? 0) || millis(a.get("createdAt")) - millis(b.get("createdAt")),
+  );
+  const variantSnaps = (await whereIn("variants", "productId", productSnaps.map((p) => p.id))).sort(
+    (a, b) => millis(a.get("createdAt")) - millis(b.get("createdAt")),
+  );
 
   const variantsByProduct = new Map<string, AdminVariant[]>();
-  for (const { productId, ...variant } of variantRows) {
-    const list = variantsByProduct.get(productId);
+  for (const v of variantSnaps) {
+    const variant = { id: v.id, size: v.get("size"), color: v.get("color"), sku: v.get("sku"), stock: v.get("stock") };
+    const list = variantsByProduct.get(v.get("productId"));
     if (list) list.push(variant);
-    else variantsByProduct.set(productId, [variant]);
-  }
-
-  const imagesByProduct = new Map<string, AdminImage[]>();
-  for (const { productId, ...image } of imageRows) {
-    const list = imagesByProduct.get(productId);
-    if (list) list.push(image);
-    else imagesByProduct.set(productId, [image]);
+    else variantsByProduct.set(v.get("productId"), [variant]);
   }
 
   const productsByFiling = new Map<string, AdminProduct[]>();
-  for (const { filingId, ...product } of productRows) {
-    // Only null when a filing was deleted out from under it (ON DELETE SET
-    // NULL), and the subquery already excludes those.
-    if (!filingId) continue;
-    const row = {
-      ...product,
-      variants: variantsByProduct.get(product.id) ?? [],
-      images: imagesByProduct.get(product.id) ?? [],
+  for (const p of productSnaps) {
+    const data = p.data();
+    const row: AdminProduct = {
+      id: p.id,
+      slug: data.slug,
+      name: data.name,
+      kind: data.kind,
+      priceCents: data.priceCents,
+      variants: variantsByProduct.get(p.id) ?? [],
+      images: imagesOf(data).map((image) => ({ id: image.id, r2Key: image.path })),
     };
-    const list = productsByFiling.get(filingId);
+    const list = productsByFiling.get(data.filingId);
     if (list) list.push(row);
-    else productsByFiling.set(filingId, [row]);
+    else productsByFiling.set(data.filingId, [row]);
   }
 
-  return filingRows.map((f) => ({
-    ...f,
+  return filingSnaps.map((f) => ({
+    id: f.id,
+    number: f.get("number"),
+    title: f.get("title"),
+    status: f.get("status"),
     products: productsByFiling.get(f.id) ?? [],
   }));
 }

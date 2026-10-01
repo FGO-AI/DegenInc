@@ -27,6 +27,11 @@ service cloud.firestore {
     // signed-in member once memberAccessAt has passed. Staff see everything,
     // which each rule adds itself.
     //
+    // THIS MUST AGREE WITH isVisible() IN src/lib/visibility.ts, which makes
+    // the same decision for the Next server. The server reads with the Admin
+    // SDK, which these rules do not apply to, so it cannot lean on them.
+    // Change one, change the other, the same way.
+    //
     // Closed-means-visible is a deliberate change from the original Postgres
     // filing_is_visible(), which applied the timestamp test to closed filings
     // too: a filing closed before its publicAt ever passed stayed hidden for

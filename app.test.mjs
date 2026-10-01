@@ -23,6 +23,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 
 const PROJECT = process.env.GCLOUD_PROJECT ?? "demo-degen-inc";
 const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? "127.0.0.1:9099";
@@ -103,7 +104,15 @@ function browser() {
   const app = initializeApp({ projectId: PROJECT, apiKey: "demo-key" }, `browser-${apps++}`);
   const auth = getAuth(app);
   connectAuthEmulator(auth, `http://${AUTH_HOST}`, { disableWarnings: true });
-  return { auth };
+  const functions = getFunctions(app);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  /** A catalogue function, called as the admin console calls it; returns its data or throws. */
+  const call = async (name, data) => {
+    const result = (await httpsCallable(functions, name)(data)).data;
+    if (!result.ok) throw new Error(`${name} refused: ${result.error}`);
+    return result.data;
+  };
+  return { auth, call };
 }
 
 /** What the browser's sign-in does: hand the SDK's fresh ID token to /api/session. */
@@ -247,6 +256,95 @@ await check("signing out clears the cookie, ends that session at once, and revok
     });
     assert(again.status === 401 && !sessionCookie(again), `a post-sign-out token started a session: ${again.status}`);
   }
+});
+
+// ---------------- Step 2: the storefront, read from Firestore ----------------
+
+// The catalogue is made the way the console makes it: through the functions.
+const owner = await enrol("owner@example.com", "Owner");
+await waitFor("the owner's users doc", async () => (await admin.db.doc(`users/${owner.uid}`).get()).exists);
+await setRole(owner, "owner");
+await signInAgain(owner);
+await signInAgain(member);
+
+const HOUR = 60 * 60 * 1000;
+// W is live and in its members' window: members since an hour ago, everyone
+// in an hour. D is a draft.
+const filingW = await staff.call("createFiling", {
+  number: 10, title: "Window",
+  memberAccessAt: new Date(Date.now() - HOUR).toISOString(),
+  publicAt: new Date(Date.now() + HOUR).toISOString(),
+});
+const windowTee = await staff.call("createProduct", { filingId: filingW.id, slug: "window-tee", name: "Window Tee", kind: "tee", priceCents: 3400 });
+const windowM = await staff.call("createVariant", { productId: windowTee.id, size: "M", color: "Black", sku: "W-M-BLK", stock: 5 });
+await owner.call("updateFilingStatus", { filingId: filingW.id, status: "scheduled" });
+await owner.call("updateFilingStatus", { filingId: filingW.id, status: "live" });
+
+const filingD = await staff.call("createFiling", { number: 11, title: "Draft" });
+const draftTee = await staff.call("createProduct", { filingId: filingD.id, slug: "draft-tee", name: "Draft Tee", kind: "tee", priceCents: 2000 });
+const draftM = await staff.call("createVariant", { productId: draftTee.id, size: "M", color: "Black", sku: "D-M-BLK", stock: 3 });
+
+const html = async (path, cookie) => {
+  const res = await get(path, cookie);
+  return { status: res.status, body: await res.text() };
+};
+const cart = async (ids, cookie) =>
+  (await (await get(`/api/cart?${new URLSearchParams(ids.map((id) => ["v", id]))}`, cookie)).json()).lines;
+
+await check("/admin loads for staff, with the catalogue read from Firestore", async () => {
+  const page = await html("/admin", staff.cookie);
+  assert(page.status === 200, `answered ${page.status}`);
+  assert(page.body.includes("Window Tee") && page.body.includes("Draft Tee"), "the catalogue is not on the page");
+});
+
+await check("/account loads for a member, from Firestore", async () => {
+  const page = await html("/account", member.cookie);
+  assert(page.status === 200, `answered ${page.status}`);
+  assert(page.body.includes("Night Member"), "the member's name is not on the record");
+});
+
+await check("the homepage shows a filing in its members' window to a member, and not to anon", async () => {
+  const asMember = await html("/", member.cookie);
+  assert(asMember.status === 200 && asMember.body.includes("Window Tee"), "a member does not see the filing");
+  const asAnon = await html("/");
+  assert(asAnon.status === 200 && !asAnon.body.includes("Window Tee"), "anon sees a filing still in its members' window");
+});
+
+await check("a product in its members' window: anon gets a 404, a member gets the page", async () => {
+  const asAnon = await html("/product/window-tee");
+  assert(asAnon.status === 404, `anon got ${asAnon.status}`);
+  assert(!asAnon.body.includes("Window Tee"), "the 404 still names the product");
+  const asMember = await html("/product/window-tee", member.cookie);
+  assert(asMember.status === 200 && asMember.body.includes("Window Tee"), `a member got ${asMember.status}`);
+});
+
+await check("a draft product's page is a 404, staff included", async () => {
+  const asStaff = await html("/product/draft-tee", staff.cookie);
+  assert(asStaff.status === 404, `staff got ${asStaff.status}`);
+});
+
+await check("the bag, in the members' window: a bare line for anon, the full line for a member", async () => {
+  const [anonLine] = await cart([windowM.id]);
+  assert(JSON.stringify(anonLine) === JSON.stringify({ variantId: windowM.id, available: false }), `anon got ${JSON.stringify(anonLine)}`);
+  const [memberLine] = await cart([windowM.id], member.cookie);
+  assert(memberLine.available === true && memberLine.productName === "Window Tee" && memberLine.stock === 5,
+    `a member got ${JSON.stringify(memberLine)}`);
+});
+
+await check("the bag: a draft variant and an unknown id are bare lines, for a member too", async () => {
+  const lines = await cart([draftM.id, "no-such-variant"], member.cookie);
+  assert(JSON.stringify(lines) === JSON.stringify([
+    { variantId: draftM.id, available: false },
+    { variantId: "no-such-variant", available: false },
+  ]), JSON.stringify(lines));
+});
+
+await check("once closed, a filing's line stays in the bag in full, unavailable, for anyone — but has no page", async () => {
+  await owner.call("updateFilingStatus", { filingId: filingW.id, status: "closed" });
+  const [anonLine] = await cart([windowM.id]);
+  assert(anonLine.available === false && anonLine.productName === "Window Tee", `anon got ${JSON.stringify(anonLine)}`);
+  const page = await html("/product/window-tee", member.cookie);
+  assert(page.status === 404, `a closed product's page answered ${page.status}`);
 });
 
 // ---------------- done ----------------
