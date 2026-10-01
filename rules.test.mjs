@@ -10,6 +10,10 @@
 // product go public a few seconds after the seed, the script checks them
 // before that moment, waits it out, and checks again. Nothing fakes
 // request.time.
+//
+// Every vote and submission sends createdAt: serverTimestamp(), as a real
+// client must — the rules refuse any other value, and refuse its absence. Even
+// the ones meant to fail send it, so each fails for its one intended reason.
 
 import {
   initializeTestEnvironment,
@@ -62,11 +66,16 @@ async function seed() {
     await setDoc(doc(db, "products/p-members"), { filingId: "f-live", filingStatus: "live", memberAccessAt: past, publicAt: soon, name: "Members-first Tee" });
     await setDoc(doc(db, "products/p-early"), { filingId: "f-live", filingStatus: "live", memberAccessAt: future, publicAt: future, name: "Not Yet Tee" });
     await setDoc(doc(db, "products/p-own-public"), { filingId: "f-members", filingStatus: "live", memberAccessAt: past, publicAt: past, name: "Already Public Tee" });
+
+    // Variants carry no visibility fields of their own; they answer to their
+    // product's.
+    await setDoc(doc(db, "products/p-members/variants/v-m"), { size: "M", color: "Black", stock: 3 });
+    await setDoc(doc(db, "products/p-early/variants/v-l"), { size: "L", color: "Black", stock: 5 });
   });
 }
 
 function anon() { return testEnv.unauthenticatedContext().firestore(); }
-function member(uid) { return testEnv.authenticatedContext(uid, { role: "customer" }).firestore(); }
+function member(uid) { return testEnv.authenticatedContext(uid, { role: "member" }).firestore(); }
 function staff(uid) { return testEnv.authenticatedContext(uid, { role: "staff" }).firestore(); }
 // Signed up a moment ago: the Cloud Function has not set the role claim yet.
 function noClaim(uid) { return testEnv.authenticatedContext(uid).firestore(); }
@@ -106,15 +115,15 @@ await check("no client, staff included, can write a product directly", async () 
 });
 
 await check("a member can vote for a live filing with a correctly-shaped id", async () => {
-  await assertSucceeds(setDoc(doc(member("u1"), "votes/f-live_u1"), { filingId: "f-live", memberId: "u1", submissionId: "s-approved" }));
+  await assertSucceeds(setDoc(doc(member("u1"), "votes/f-live_u1"), { filingId: "f-live", memberId: "u1", submissionId: "s-approved", createdAt: serverTimestamp() }));
 });
 
 await check("a member cannot vote for a draft filing", async () => {
-  await assertFails(setDoc(doc(member("u2"), "votes/f-draft_u2"), { filingId: "f-draft", memberId: "u2", submissionId: "s-approved" }));
+  await assertFails(setDoc(doc(member("u2"), "votes/f-draft_u2"), { filingId: "f-draft", memberId: "u2", submissionId: "s-approved", createdAt: serverTimestamp() }));
 });
 
 await check("a member cannot vote as someone else (id/uid mismatch)", async () => {
-  await assertFails(setDoc(doc(member("u3"), "votes/f-live_u4"), { filingId: "f-live", memberId: "u4", submissionId: "s-approved" }));
+  await assertFails(setDoc(doc(member("u3"), "votes/f-live_u4"), { filingId: "f-live", memberId: "u4", submissionId: "s-approved", createdAt: serverTimestamp() }));
 });
 
 // The subtle one. allow create is only evaluated when no document exists
@@ -122,12 +131,12 @@ await check("a member cannot vote as someone else (id/uid mismatch)", async () =
 // which is `false`. Confirmed against the emulator, whose trace shows the
 // second write decided by 'update' alone.
 await check("a member cannot vote twice in the same filing (create-vs-update on an existing id)", async () => {
-  await assertFails(setDoc(doc(member("u1"), "votes/f-live_u1"), { filingId: "f-live", memberId: "u1", submissionId: "s-approved" }));
+  await assertFails(setDoc(doc(member("u1"), "votes/f-live_u1"), { filingId: "f-live", memberId: "u1", submissionId: "s-approved", createdAt: serverTimestamp() }));
 });
 
 await check("a member cannot write their own role", async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), "users/u5"), { role: "customer", email: "u5@example.com" });
+    await setDoc(doc(ctx.firestore(), "users/u5"), { role: "member", email: "u5@example.com" });
   });
   await assertFails(updateDoc(doc(member("u5"), "users/u5"), { role: "owner" }));
 });
@@ -143,26 +152,41 @@ await check("counters are never client-readable or client-writable", async () =>
   await assertFails(getDoc(doc(staff("s1"), "counters/certificates")));
 });
 
+await check("skus are never client-readable or client-writable", async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), "skus/DGN-001-M-BLK"), { productId: "p-live" });
+  });
+  await assertFails(getDoc(doc(staff("s1"), "skus/DGN-001-M-BLK")));
+});
+
 // ---------------- submissions: what a public create may carry ----------------
 
 await check("a submission created already approved with reviewedBy set is refused", async () => {
-  await assertFails(setDoc(doc(anon(), "submissions/forged-1"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "approved", reviewedBy: "owner-uid" }));
+  await assertFails(setDoc(doc(anon(), "submissions/forged-1"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "approved", reviewedBy: "owner-uid", createdAt: serverTimestamp() }));
 });
 
 await check("a submission created as approved, no review fields, is refused (status check alone)", async () => {
-  await assertFails(setDoc(doc(anon(), "submissions/forged-2"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "approved" }));
+  await assertFails(setDoc(doc(anon(), "submissions/forged-2"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "approved", createdAt: serverTimestamp() }));
 });
 
 await check("a submission created as new but with reviewedBy set is refused (field set alone)", async () => {
-  await assertFails(setDoc(doc(anon(), "submissions/forged-3"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "new", reviewedBy: "owner-uid" }));
+  await assertFails(setDoc(doc(anon(), "submissions/forged-3"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "new", reviewedBy: "owner-uid", createdAt: serverTimestamp() }));
 });
 
 await check("a submission with a field outside the allowed set is refused", async () => {
-  await assertFails(setDoc(doc(anon(), "submissions/extra-field"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "new", priority: "high" }));
+  await assertFails(setDoc(doc(anon(), "submissions/extra-field"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "new", priority: "high", createdAt: serverTimestamp() }));
 });
 
 await check("a submission missing a required field (workUrl) is refused", async () => {
-  await assertFails(setDoc(doc(anon(), "submissions/missing-field"), { name: "Me", contact: "me@example.com", status: "new" }));
+  await assertFails(setDoc(doc(anon(), "submissions/missing-field"), { name: "Me", contact: "me@example.com", status: "new", createdAt: serverTimestamp() }));
+});
+
+await check("a submission with a backdated createdAt is refused", async () => {
+  await assertFails(setDoc(doc(anon(), "submissions/backdated"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "new", createdAt: past }));
+});
+
+await check("a submission with no createdAt is refused", async () => {
+  await assertFails(setDoc(doc(anon(), "submissions/undated"), { name: "Me", contact: "me@example.com", workUrl: "https://example.com/me", status: "new" }));
 });
 
 await check("a plain, honest new submission still succeeds", async () => {
@@ -172,19 +196,27 @@ await check("a plain, honest new submission still succeeds", async () => {
 // ---------------- votes: what a vote may carry and point at ----------------
 
 await check("a vote carrying an extra weight field is refused", async () => {
-  await assertFails(setDoc(doc(member("u10"), "votes/f-live_u10"), { filingId: "f-live", memberId: "u10", submissionId: "s-approved", weight: 1000 }));
+  await assertFails(setDoc(doc(member("u10"), "votes/f-live_u10"), { filingId: "f-live", memberId: "u10", submissionId: "s-approved", weight: 1000, createdAt: serverTimestamp() }));
 });
 
 await check("a vote referencing a submission that does not exist is refused", async () => {
-  await assertFails(setDoc(doc(member("u11"), "votes/f-live_u11"), { filingId: "f-live", memberId: "u11", submissionId: "no-such-submission" }));
+  await assertFails(setDoc(doc(member("u11"), "votes/f-live_u11"), { filingId: "f-live", memberId: "u11", submissionId: "no-such-submission", createdAt: serverTimestamp() }));
 });
 
 await check("a vote referencing a submission that exists but is not approved is refused", async () => {
-  await assertFails(setDoc(doc(member("u12"), "votes/f-live_u12"), { filingId: "f-live", memberId: "u12", submissionId: "s-new" }));
+  await assertFails(setDoc(doc(member("u12"), "votes/f-live_u12"), { filingId: "f-live", memberId: "u12", submissionId: "s-new", createdAt: serverTimestamp() }));
 });
 
 await check("a vote referencing an approved submission succeeds", async () => {
   await assertSucceeds(setDoc(doc(member("u13"), "votes/f-live_u13"), { filingId: "f-live", memberId: "u13", submissionId: "s-approved", createdAt: serverTimestamp() }));
+});
+
+await check("a vote with a backdated createdAt is refused", async () => {
+  await assertFails(setDoc(doc(member("u14"), "votes/f-live_u14"), { filingId: "f-live", memberId: "u14", submissionId: "s-approved", createdAt: past }));
+});
+
+await check("a vote with no createdAt is refused", async () => {
+  await assertFails(setDoc(doc(member("u15"), "votes/f-live_u15"), { filingId: "f-live", memberId: "u15", submissionId: "s-approved" }));
 });
 
 // ---------------- filings: the members' window, before publicAt ----------------
@@ -231,6 +263,24 @@ await check("anon can read a product whose own copy is public, though its filing
   await assertSucceeds(getDoc(doc(anon(), "products/p-own-public")));
 });
 
+// ---------------- variants: exactly as visible as their product ----------------
+
+await check(`anon cannot read a variant of a product in its members' window (${whenVsSoon()})`, async () => {
+  await assertFails(getDoc(doc(anon(), "products/p-members/variants/v-m")));
+});
+
+await check(`a member can read a variant of a product in its members' window (${whenVsSoon()})`, async () => {
+  await assertSucceeds(getDoc(doc(member("m1"), "products/p-members/variants/v-m")));
+});
+
+await check("a member cannot read a variant of a product before its memberAccessAt", async () => {
+  await assertFails(getDoc(doc(member("m1"), "products/p-early/variants/v-l")));
+});
+
+await check("staff can read a variant of a product nobody else can see yet", async () => {
+  await assertSucceeds(getDoc(doc(staff("s1"), "products/p-early/variants/v-l")));
+});
+
 // ---------------- after publicAt has passed on the emulator's clock ----------------
 
 const wait = soon.getTime() + 1500 - Date.now();
@@ -242,6 +292,10 @@ await check(`anon can read the members'-window filing once publicAt has passed (
 
 await check(`anon can read the members'-window product once publicAt has passed (${whenVsSoon()})`, async () => {
   await assertSucceeds(getDoc(doc(anon(), "products/p-members")));
+});
+
+await check(`anon can read that product's variant once publicAt has passed (${whenVsSoon()})`, async () => {
+  await assertSucceeds(getDoc(doc(anon(), "products/p-members/variants/v-m")));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

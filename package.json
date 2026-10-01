@@ -17,7 +17,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply degen-inc --remote",
     "db:seed": "wrangler d1 execute degen-inc --local --file scripts/seed.sql",
     "preview:pages": "node scripts/preview-export.mjs",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-degen-inc \"node rules.test.mjs\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-degen-inc \"node rules.test.mjs\"",
+    "test:functions": "npm --prefix functions run build && firebase emulators:exec --only functions,firestore,auth,storage --project demo-degen-inc \"node functions.test.mjs\""
   },
   "dependencies": {
     "better-auth": "^1.7.1",
