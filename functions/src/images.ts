@@ -6,7 +6,7 @@ import { reference } from "./validation";
 import { MAX_IMAGE_BYTES, sniffImageType, extensionFor } from "./imageSniff";
 
 /**
- * Mirrors src/lib/db/admin.ts's uploadProductImage() (lines 309-378), with
+ * Mirrors the D1 console's uploadProductImage(), with
  * Cloud Storage for Firebase in place of R2.
  *
  * A callable's only input mode is JSON, so the file travels as base64 rather

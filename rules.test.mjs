@@ -81,7 +81,7 @@ async function seed() {
 function anon() { return testEnv.unauthenticatedContext().firestore(); }
 function member(uid) { return testEnv.authenticatedContext(uid, { role: "member" }).firestore(); }
 function staff(uid) { return testEnv.authenticatedContext(uid, { role: "staff" }).firestore(); }
-// Signed up a moment ago: the Cloud Function has not set the role claim yet.
+// No role claim at all: every account, until scripts/promote-role.mjs promotes it.
 function noClaim(uid) { return testEnv.authenticatedContext(uid).firestore(); }
 
 let pass = 0, fail = 0;
@@ -237,7 +237,7 @@ await check(`anon cannot read a live filing in its members' window (${whenVsSoon
   await assertFails(getDoc(doc(anon(), "filings/f-members")));
 });
 
-await check("a signed-in account with no role claim yet gets the members' window too", async () => {
+await check("a signed-in account with no role claim gets the members' window too", async () => {
   await assertSucceeds(getDoc(doc(noClaim("n1"), "filings/f-members")));
 });
 

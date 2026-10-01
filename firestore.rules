@@ -39,7 +39,8 @@ service cloud.firestore {
     //
     // request.time is the server's clock, never the client's. "Member" means
     // any signed-in account, as it always has in this codebase — including one
-    // whose role claim a Cloud Function has not set yet.
+    // with no role claim at all, which is every account until
+    // scripts/promote-role.mjs makes it staff or owner.
     //
     // The comparisons are deliberately bare. A missing or non-timestamp field
     // makes its branch an evaluation error, which grants nothing — "not yet",

@@ -168,13 +168,13 @@ const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1
 
 let member, staff, owner;
 
-await check("a fresh sign-up gets role 'member' on both its claim and its users doc", async () => {
+await check("a fresh sign-up gets a users doc with role 'member', and no role claim", async () => {
   member = await signUp("member@example.com");
   await settled(member.uid);
-  const record = await admin.auth.getUser(member.uid);
-  assert(record.customClaims?.role === "member", `claim is ${JSON.stringify(record.customClaims)}`);
   const docRole = (await data(`users/${member.uid}`))?.role;
   assert(docRole === "member", `users doc role is ${docRole}`);
+  const record = await admin.auth.getUser(member.uid);
+  assert(record.customClaims?.role === undefined, `the trigger set a claim: ${JSON.stringify(record.customClaims)}`);
 });
 
 await check("a signed-out caller is refused (unauthenticated)", async () => {
@@ -221,47 +221,56 @@ owner = await signUp("owner@example.com");
 await settled(owner.uid);
 await promote(owner, "owner");
 
-await check("onUserCreate never downgrades a role set before it ran", async () => {
+await check("onUserCreate never touches a role claim, so a promotion cannot be lost to it", async () => {
   // Created and promoted in one breath, the way a seed script would, so the
-  // promotion usually lands before the trigger fires.
+  // promotion and the trigger land in whatever order they land. The trigger
+  // writes no claim, so the order no longer matters to the claim. (It once
+  // set 'member', and this exact check caught it demoting an owner.)
   const created = await admin.auth.createUser({ email: "seeded-owner@example.com", password: "password-123" });
   await admin.auth.setCustomUserClaims(created.uid, { role: "owner" });
   await settled(created.uid);
   const record = await admin.auth.getUser(created.uid);
   assert(record.customClaims?.role === "owner", `claim is ${JSON.stringify(record.customClaims)}`);
-  const docRole = (await data(`users/${created.uid}`))?.role;
-  // "owner" here means the trigger ran after the promotion and read it, which
-  // is the ordering this check exists for. "member" would mean it ran first,
-  // and the check proved less than it claims — say so rather than pass quietly.
-  assert(docRole === "owner", `users doc role is ${docRole}: the trigger ran before the promotion, so this ordering was not exercised`);
 });
 
 // ---------------- filings ----------------
 
 let f1, f2, f3, f4, f5;
 
-await check("staff can create a filing, as a draft, with a random id and a number lookup", async () => {
-  f1 = succeeded(await staff.call("createFiling", { number: 1, title: "Night Shift" }));
+await check("staff can create a filing, as a draft, with a random id, its two times and a number lookup", async () => {
+  f1 = succeeded(await staff.call("createFiling", { number: 1, title: "Night Shift", memberAccessAt, publicAt }));
   assert(f1.status === "draft" && /^[A-Za-z0-9]{20}$/.test(f1.id), JSON.stringify(f1));
   const doc = await data(`filings/${f1.id}`);
   assert(doc?.status === "draft" && doc?.number === 1, JSON.stringify(doc));
+  assert(doc?.memberAccessAt?.toDate?.().toISOString() === memberAccessAt && doc?.publicAt?.toDate?.().toISOString() === publicAt,
+    "the two times were not stored as sent");
   const lookup = await data("filingNumbers/001");
   assert(lookup?.filingId === f1.id, `filingNumbers/001 is ${JSON.stringify(lookup)}`);
 });
 
-await check("a duplicate filing number is refused with admin.ts's own message", async () => {
-  refused(await staff.call("createFiling", { number: 1, title: "Again" }), "Filing 001 already exists.");
+await check("a duplicate filing number is refused with the D1 console's own message", async () => {
+  refused(await staff.call("createFiling", { number: 1, title: "Again", memberAccessAt, publicAt }), "Filing 001 already exists.");
   assert((await count(admin.db.collection("filings").where("number", "==", 1))) === 1, "a second filing 001 was written");
 });
 
-await check("member access after the public date is refused", async () => {
-  refused(
-    await staff.call("createFiling", { number: 9, title: "Backwards", memberAccessAt: publicAt, publicAt: memberAccessAt }),
-    "Member access cannot start after the public date.",
-  );
+await check("a filing without both times is refused", async () => {
+  refused(await staff.call("createFiling", { number: 9, title: "Untimed" }), "Set when members get in and when the public does.");
+  refused(await staff.call("createFiling", { number: 9, title: "Half", memberAccessAt }), "Set when members get in and when the public does.");
 });
 
-f2 = succeeded(await staff.call("createFiling", { number: 2, title: "Second" }));
+await check("a public date that is not after the members' date is refused — equal included", async () => {
+  refused(
+    await staff.call("createFiling", { number: 9, title: "Backwards", memberAccessAt: publicAt, publicAt: memberAccessAt }),
+    "The public date has to be after the members' date.",
+  );
+  refused(
+    await staff.call("createFiling", { number: 9, title: "Same moment", memberAccessAt, publicAt: memberAccessAt }),
+    "The public date has to be after the members' date.",
+  );
+  assert(!(await admin.db.doc("filingNumbers/009").get()).exists, "a refused filing claimed its number anyway");
+});
+
+f2 = succeeded(await staff.call("createFiling", { number: 2, title: "Second", memberAccessAt, publicAt }));
 f3 = succeeded(await staff.call("createFiling", { number: 3, title: "Timed", memberAccessAt, publicAt }));
 f4 = succeeded(await staff.call("createFiling", { number: 4, title: "Timed too", memberAccessAt, publicAt }));
 f5 = succeeded(await staff.call("createFiling", { number: 5, title: "Timed three", memberAccessAt, publicAt }));
@@ -353,8 +362,8 @@ await check("a SKU Firestore reserves as a document id (__x__) is refused cleanl
 // fail with its sentence, and nothing of the loser's may be left behind.
 
 await check("two overlapping creates of one filing number: one wins, one is refused", async () => {
-  const results = await race(staff, "createFiling", { number: 1, title: "warm" },
-    { number: 60, title: "Race A" }, { number: 60, title: "Race B" });
+  const results = await race(staff, "createFiling", { number: 1, title: "warm", memberAccessAt, publicAt },
+    { number: 60, title: "Race A", memberAccessAt, publicAt }, { number: 60, title: "Race B", memberAccessAt, publicAt });
   const winner = oneWinner(results, "Filing 060 already exists.");
   assert((await count(admin.db.collection("filings").where("number", "==", 60))) === 1, "two filings 060 exist");
   assert((await data("filingNumbers/060"))?.filingId === winner.id, "the lookup does not point at the winner");
@@ -430,33 +439,45 @@ await check("a filing cannot skip a step (draft straight to live)", async () => 
   );
 });
 
-await check("going live without a public and member-access date is refused, loudly", async () => {
-  succeeded(await owner.call("updateFilingStatus", { filingId: f1.id, status: "scheduled" }));
+await check("going live without both times is refused, loudly — for a filing made before they were required", async () => {
+  // createFiling no longer makes one, so it is seeded the way old data would be.
+  const legacy = admin.db.collection("filings").doc();
+  await legacy.set({ number: 70, title: "Legacy", status: "scheduled" });
   refused(
-    await owner.call("updateFilingStatus", { filingId: f1.id, status: "live" }),
+    await owner.call("updateFilingStatus", { filingId: legacy.id, status: "live" }),
     "Set a public date and a member-access date before taking this filing live.",
   );
-  assert((await data(`filings/${f1.id}`))?.status === "scheduled", "the filing moved anyway");
+  assert((await data(`filings/${legacy.id}`))?.status === "scheduled", "the filing moved anyway");
 });
 
 // Filing 003's products: one made through the function (so it already holds
 // copies of the timestamps), and one seeded straight into Firestore with no
-// copies at all — so only the go-live transaction can have put them there.
+// copies at all — so only the status transaction can have put them there.
 const nightTee = succeeded(await staff.call("createProduct", { filingId: f3.id, slug: "night-tee", name: "Night Tee", kind: "tee", priceCents: 3400 }));
 const seededTee = admin.db.collection("products").doc();
 await seededTee.set({ filingId: f3.id, filingStatus: "draft", slug: "seeded-tee", name: "Seeded Tee" });
 let lateTee;
 
-await check("going live pushes filingStatus, publicAt and memberAccessAt onto every product in the same write", async () => {
-  succeeded(await owner.call("updateFilingStatus", { filingId: f3.id, status: "scheduled" }));
-  succeeded(await owner.call("updateFilingStatus", { filingId: f3.id, status: "live" }));
-  const filing = await data(`filings/${f3.id}`);
-  for (const id of [nightTee.id, seededTee.id]) {
+/** Every product of the filing holds exactly the filing's status and times. */
+async function productsMatch(filingId, status, productIds) {
+  const filing = await data(`filings/${filingId}`);
+  assert(filing.status === status, `the filing is ${filing.status}, not ${status}`);
+  for (const id of productIds) {
     const p = await data(`products/${id}`);
-    assert(p?.filingStatus === "live", `${p?.slug} filingStatus is ${p?.filingStatus}`);
+    assert(p?.filingStatus === status, `${p?.slug} filingStatus is ${p?.filingStatus}`);
     assert(p?.publicAt?.isEqual?.(filing.publicAt), `${p?.slug} publicAt does not match the filing's`);
     assert(p?.memberAccessAt?.isEqual?.(filing.memberAccessAt), `${p?.slug} memberAccessAt does not match the filing's`);
   }
+}
+
+await check("scheduling writes the status and both times onto every product, in the same write", async () => {
+  succeeded(await owner.call("updateFilingStatus", { filingId: f3.id, status: "scheduled" }));
+  await productsMatch(f3.id, "scheduled", [nightTee.id, seededTee.id]);
+});
+
+await check("going live writes the status and both times onto every product, in the same write", async () => {
+  succeeded(await owner.call("updateFilingStatus", { filingId: f3.id, status: "live" }));
+  await productsMatch(f3.id, "live", [nightTee.id, seededTee.id]);
   assert((await data("state/currentFiling"))?.filingId === f3.id, "state/currentFiling does not point at filing 003");
 });
 

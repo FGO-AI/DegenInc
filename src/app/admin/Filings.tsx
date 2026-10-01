@@ -12,7 +12,7 @@ import {
   updateFilingStatus,
   uploadProductImage,
   type ActionResult,
-} from "@/lib/db/admin";
+} from "@/lib/catalogue/client";
 import type {
   AdminFiling,
   AdminImage,
@@ -31,9 +31,10 @@ import styles from "./admin.module.css";
  * source of truth: each action returns the row it wrote, and that row is
  * spliced into local state — no refetch, no route per step.
  *
+ * Every action is a Cloud Function call (src/lib/catalogue/client.ts).
  * Nothing here is a security boundary. Hiding the status control from staff is
- * a courtesy; updateFilingStatus() checks requireOwner() on the server whatever
- * this renders.
+ * a courtesy; the updateFilingStatus function checks the owner claim itself,
+ * whatever this renders.
  */
 export function FilingsPane({
   initial,
@@ -284,18 +285,17 @@ function ProductRow({
             {product.images.map((image) => (
               <li key={image.id}>
                 <a
-                  href={imageSrc(image.r2Key)}
+                  href={imageSrc(image.path)}
                   target="_blank"
                   rel="noreferrer"
-                  title={image.r2Key}
+                  title={image.path}
                 >
-                  {/* Plain <img> on purpose. next/image would route through the
-                      OpenNext optimiser, which needs a Cloudflare Images
-                      binding this app deliberately does not have — see
-                      src/lib/images.ts. */}
+                  {/* Plain <img> on purpose. /images/... decides per request
+                      who may see an image; next/image's optimiser would fetch
+                      it once and serve its own cached copy to anyone. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imageSrc(image.r2Key)}
+                    src={imageSrc(image.path)}
                     alt={product.name}
                     loading="lazy"
                   />
@@ -385,9 +385,9 @@ function StatusControl({
         </Button>
       )}
 
-      {/* filings_one_live_idx refuses a second live filing, and the server
-          names the one in the way. Say it here too, before the click, from
-          what this console already holds — the server stays the authority. */}
+      {/* The function refuses a second live filing, and names the one in the
+          way. Say it here too, before the click, from what this console
+          already holds — the function stays the authority. */}
       {to === "live" && armed && alsoLive.length > 0 && (
         <p className={styles.warn}>
           {alsoLive.map((f) => `Filing ${pad(f.number)}`).join(", ")} is still
@@ -423,6 +423,10 @@ function NewFilingForm({
         createFiling({
           number: Number(form.get("number")),
           title: String(form.get("title") ?? ""),
+          // datetime-local is the staffer's own wall clock, with no zone.
+          // new Date() reads it as local time; the ISO string is UTC.
+          memberAccessAt: isoFromLocal(form.get("memberAccessAt")),
+          publicAt: isoFromLocal(form.get("publicAt")),
         }),
       onCreated,
     );
@@ -449,6 +453,22 @@ function NewFilingForm({
           type="text"
           maxLength={120}
           placeholder="What this drop is called"
+          required
+        />
+        <Field
+          id="nf-member-access"
+          name="memberAccessAt"
+          label="Members get in"
+          type="datetime-local"
+          hint="Signed-in members can see and buy from this moment, once it is live."
+          required
+        />
+        <Field
+          id="nf-public"
+          name="publicAt"
+          label="Public from"
+          type="datetime-local"
+          hint="Everyone can, from this one. It has to be after the members' time."
           required
         />
       </div>
@@ -610,10 +630,9 @@ function NewVariantForm({
 }
 
 /**
- * Mirrors MAX_IMAGE_BYTES in src/lib/images.ts, which is server-only and so
- * cannot be imported here. The server enforces its own copy; this one exists
- * because a file over serverActions.bodySizeLimit is refused before the action
- * runs, and that refusal arrives with no message worth showing.
+ * Mirrors MAX_IMAGE_BYTES in functions/src/imageSniff.ts, which belongs to the
+ * functions package and so cannot be imported here. The function enforces its
+ * own copy; this one saves reading and sending a file it will refuse.
  */
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
@@ -689,9 +708,10 @@ function useSubmit() {
       if (result.ok) onDone(result.data);
       else setError(result.error);
     } catch {
-      // A thrown action error arrives with its message stripped, so there is
-      // nothing more specific to say. Expected failures never land here —
-      // they come back as { ok: false }.
+      // A refused or failed function call arrives with nothing worth showing,
+      // so there is nothing more specific to say — and a reload is what puts a
+      // signed-out console back through the /admin guard. Expected failures
+      // never land here; they come back as { ok: false }.
       setError("That did not go through. Reload and try again.");
     } finally {
       setPending(false);
@@ -710,3 +730,9 @@ function imageSrc(key: string): string {
 }
 
 const pad = (n: number) => String(n).padStart(3, "0");
+
+/** A datetime-local value as an ISO string, or "" for the function to refuse. */
+function isoFromLocal(value: FormDataEntryValue | null): string {
+  const time = new Date(String(value ?? ""));
+  return Number.isNaN(time.getTime()) ? "" : time.toISOString();
+}

@@ -55,8 +55,8 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     return null;
   }
 
-  // Anything other than the two elevated roles — including no claim yet,
-  // between sign-up and the onUserCreate trigger — is a member.
+  // Anything other than the two elevated roles is a member — including no
+  // role claim at all, which is every account until it is promoted.
   const role = claims.role;
 
   return {

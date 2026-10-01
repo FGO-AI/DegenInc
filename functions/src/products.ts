@@ -5,7 +5,7 @@ import { words, optionalWords, reference, SLUG } from "./validation";
 import { claimingUnique } from "./unique";
 
 /**
- * Mirrors src/lib/db/admin.ts's createProduct() (lines 186-248).
+ * Mirrors the D1 console's createProduct().
  *
  * The product gets a random id; its slug, unique as it was in D1, is held by a
  * slugs/{slug} lookup created in the same transaction (unique.ts). The slug is

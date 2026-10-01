@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { Rejected } from "./guards";
 
-// Ported from src/lib/db/admin.ts's plumbing section (lines 439-501) — same
+// Ported from the D1 console's validation helpers — same
 // validation, same messages, so a staffer sees no difference in what a bad
 // input tells them.
 

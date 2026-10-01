@@ -75,8 +75,8 @@ export async function signUp(input: {
   try {
     const { user } = await createUserWithEmailAndPassword(clientAuth(), input.email, input.password);
     // Before the session starts, so the name is in the token the cookie is
-    // made from. The users/{uid} document and the member role come from the
-    // onUserCreate Cloud Function, a moment later.
+    // made from. The users/{uid} document comes from the onUserCreate Cloud
+    // Function, a moment later. No role claim is set: no claim means member.
     await updateProfile(user, { displayName: input.name });
     return await startSession(user);
   } catch (err) {

@@ -1,4 +1,4 @@
-// Ported verbatim from src/lib/images.ts — pure byte-sniffing logic with no
+// Ported verbatim from the D1 app's image module — pure byte-sniffing logic with no
 // Cloudflare/R2 dependency, so it copies unchanged into Node.
 
 /** Largest image accepted, in bytes. */

@@ -173,8 +173,9 @@ await check("signing up creates the account, a users doc with role 'member', and
   assert(member.res.status === 204, `POST /api/session answered ${member.res.status}`);
   const user = await waitFor("the users doc", async () => (await admin.db.doc(`users/${member.uid}`).get()).data());
   assert(user.role === "member", `users doc role is ${user.role}`);
-  const claims = await waitFor("the role claim", async () => (await admin.auth.getUser(member.uid)).customClaims);
-  assert(claims.role === "member", `claim is ${JSON.stringify(claims)}`);
+  // No role claim: no claim is what makes an account a member.
+  const claims = (await admin.auth.getUser(member.uid)).customClaims;
+  assert(claims?.role === undefined, `a role claim was set: ${JSON.stringify(claims)}`);
 });
 
 await check("the session cookie is httpOnly, secure, sameSite=lax, site-wide, five days", async () => {
@@ -280,7 +281,11 @@ const windowM = await staff.call("createVariant", { productId: windowTee.id, siz
 await owner.call("updateFilingStatus", { filingId: filingW.id, status: "scheduled" });
 await owner.call("updateFilingStatus", { filingId: filingW.id, status: "live" });
 
-const filingD = await staff.call("createFiling", { number: 11, title: "Draft" });
+const filingD = await staff.call("createFiling", {
+  number: 11, title: "Draft",
+  memberAccessAt: new Date(Date.now() - HOUR).toISOString(),
+  publicAt: new Date(Date.now() - HOUR / 2).toISOString(),
+});
 const draftTee = await staff.call("createProduct", { filingId: filingD.id, slug: "draft-tee", name: "Draft Tee", kind: "tee", priceCents: 2000 });
 const draftM = await staff.call("createVariant", { productId: draftTee.id, size: "M", color: "Black", sku: "D-M-BLK", stock: 3 });
 

@@ -37,7 +37,7 @@ async function verifiedRole(request: CallableRequest): Promise<{ uid: string; ro
  *
  * Business-rule failures (bad slug, duplicate sku, wrong filing status) are
  * NOT guard failures — those throw Rejected, caught by attempt() below into
- * an ActionResult, exactly like admin.ts's explain()/Rejected.
+ * an ActionResult, as the D1 console's Server Actions did.
  */
 export async function requireStaff(request: CallableRequest): Promise<string> {
   const { uid, role } = await verifiedRole(request);

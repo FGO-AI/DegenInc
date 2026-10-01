@@ -99,10 +99,11 @@ still calls the D1 Server Actions in `src/lib/db/admin.ts`.
   Functions.
 - `functions/` — the Cloud Functions, a package of its own with its own
   `package.json` and build (`npm --prefix functions install` once). Five
-  callables mirror the catalogue actions in `admin.ts` — `createFiling`,
+  callables are the admin console's catalogue actions — `createFiling`,
   `updateFilingStatus` (owner only), `createProduct`, `createVariant`,
-  `uploadProductImage` — and `onUserCreate` gives every new account the
-  `member` role claim. Filings, products and variants get random ids;
+  `uploadProductImage` — and `onUserCreate` writes every new account's
+  `users/{uid}` document with role `member`. No role claim means member;
+  only `scripts/promote-role.mjs` sets one. Filings, products and variants get random ids;
   variants are a top-level collection with a `productId` field, because the
   bag and checkout know a variant by its id alone. Each unique value — a
   filing number, a slug, a SKU, a product's size and colour — has a lookup

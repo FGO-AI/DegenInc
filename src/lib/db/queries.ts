@@ -459,7 +459,7 @@ export type AdminVariant = {
 export type AdminImage = {
   id: string;
   /** Storage path. The URL is /images/<path>, built where it is rendered. */
-  r2Key: string;
+  path: string;
 };
 
 export type AdminProduct = {
@@ -532,7 +532,7 @@ export async function getAdminCatalog(): Promise<AdminFiling[]> {
       kind: data.kind,
       priceCents: data.priceCents,
       variants: variantsByProduct.get(p.id) ?? [],
-      images: imagesOf(data).map((image) => ({ id: image.id, r2Key: image.path })),
+      images: imagesOf(data).map((image) => ({ id: image.id, path: image.path })),
     };
     const list = productsByFiling.get(data.filingId);
     if (list) list.push(row);

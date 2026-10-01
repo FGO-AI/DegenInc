@@ -5,7 +5,7 @@ import { words, wholeNumber, reference, docIdFrom } from "./validation";
 import { claimingUnique } from "./unique";
 
 /**
- * Mirrors src/lib/db/admin.ts's createVariant() (lines 250-291).
+ * Mirrors the D1 console's createVariant().
  *
  * Variants live in the top-level variants collection under a random id, with
  * the product they belong to in productId. The bag, /api/cart and checkout
