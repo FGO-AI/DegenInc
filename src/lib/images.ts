@@ -3,16 +3,16 @@ import "server-only";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 /**
- * Product images live in R2 and are served by src/app/images/[...key]/route.ts.
+ * Product images now live in Cloud Storage, written by the uploadProductImage
+ * Cloud Function and served by src/app/images/[...key]/route.ts.
  *
- * No Cloudflare Images and no next/image: the catalogue is small, Images bills
- * per transform, and the OpenNext image optimiser does nothing useful without
- * that binding. Uploads are stored as sent and rendered with a plain <img>.
+ * No next/image: the catalogue is small, and uploads are stored as sent and
+ * rendered with a plain <img>.
  */
 
 /**
- * The R2 bucket, resolved per request the same way getDb() resolves D1 — the
- * binding does not exist outside one, so this cannot be a module singleton.
+ * The R2 bucket. Only the D1-era uploadProductImage() in src/lib/db/admin.ts
+ * still uses it, and both go when the console moves to the Cloud Functions.
  */
 export function getImageBucket(): R2Bucket {
   const { env } = getCloudflareContext();

@@ -347,6 +347,61 @@ await check("once closed, a filing's line stays in the bag in full, unavailable,
   assert(page.status === 404, `a closed product's page answered ${page.status}`);
 });
 
+// ---------------- Step 3: images, from Cloud Storage, to who may see them ----------------
+
+// A real JPEG header (SOI + APP0/JFIF) padded to the 12 bytes the sniffer needs.
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00]);
+const upload = (productId) => staff.call("uploadProductImage", { productId, fileBase64: JPEG.toString("base64") });
+
+// X is live and in its members' window, like W was.
+const filingX = await staff.call("createFiling", {
+  number: 12, title: "Window again",
+  memberAccessAt: new Date(Date.now() - HOUR).toISOString(),
+  publicAt: new Date(Date.now() + HOUR).toISOString(),
+});
+const xTee = await staff.call("createProduct", { filingId: filingX.id, slug: "x-tee", name: "X Tee", kind: "tee", priceCents: 3400 });
+await owner.call("updateFilingStatus", { filingId: filingX.id, status: "scheduled" });
+await owner.call("updateFilingStatus", { filingId: filingX.id, status: "live" });
+
+const imageX = await upload(xTee.id);         // members' window
+const imageD = await upload(draftTee.id);     // draft
+const imageW = await upload(windowTee.id);    // closed
+
+const image = async (path, cookie) => {
+  const res = await get(`/images/${path}`, cookie);
+  return { status: res.status, cache: res.headers.get("cache-control"), type: res.headers.get("content-type"), bytes: Buffer.from(await res.arrayBuffer()) };
+};
+
+await check("a members'-window image: refused for anon, served to a member, privately", async () => {
+  const asAnon = await image(imageX.path);
+  assert(asAnon.status === 404, `anon got ${asAnon.status}`);
+  const asMember = await image(imageX.path, member.cookie);
+  assert(asMember.status === 200 && asMember.type === "image/jpeg", `a member got ${asMember.status} ${asMember.type}`);
+  assert(asMember.bytes.equals(JPEG), "the bytes served are not the bytes uploaded");
+  assert(asMember.cache === "private, no-store", `cached as ${asMember.cache}`);
+});
+
+await check("a draft's image: refused for a member, served to staff, privately", async () => {
+  const asMember = await image(imageD.path, member.cookie);
+  assert(asMember.status === 404, `a member got ${asMember.status}`);
+  const asStaff = await image(imageD.path, staff.cookie);
+  assert(asStaff.status === 200 && asStaff.cache === "private, no-store", `staff got ${asStaff.status}, cached as ${asStaff.cache}`);
+});
+
+await check("a closed product's image: served to anyone, and cached publicly", async () => {
+  const asAnon = await image(imageW.path);
+  assert(asAnon.status === 200 && asAnon.bytes.equals(JPEG), `anon got ${asAnon.status}`);
+  assert(asAnon.cache === "public, max-age=31536000, immutable", `cached as ${asAnon.cache}`);
+});
+
+await check("a key the product does not list, or of the wrong shape, is a 404 for anyone", async () => {
+  const unlisted = `products/${xTee.id}/00000000-0000-4000-8000-000000000000.jpg`;
+  for (const path of [unlisted, "elsewhere/thing.jpg", `products/${xTee.id}/..%2F..%2Fsecret`, `products/${xTee.id}`]) {
+    const res = await image(path, staff.cookie);
+    assert(res.status === 404, `${path} answered ${res.status}`);
+  }
+});
+
 // ---------------- done ----------------
 
 if (fail > 0) console.log("\n--- app server log ---\n" + serverLog.slice(-4000));
