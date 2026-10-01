@@ -36,7 +36,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const { orderId } = await purchaseVariant({
       // From the session, never the payload.
-      userId: session.id,
+      buyer: session,
       variantId: body.variantId,
       quantity: body.quantity ?? 1,
     });
@@ -49,9 +49,8 @@ export async function POST(request: Request): Promise<Response> {
     if (err instanceof FilingClosedError) {
       return Response.json({ ok: false, error: "filing_closed" }, { status: 409 });
     }
-    // An unknown variant or a quantity below 1, refused before any write.
-    // (A bad quantity used to reach the batch, trip the order_items quantity
-    // CHECK and come back here as a misleading out_of_stock.)
+    // An unknown variant, one not on sale to this buyer, or a quantity below 1,
+    // refused before any write.
     if (err instanceof InvalidOrderError) {
       return Response.json({ ok: false, error: err.message }, { status: 400 });
     }

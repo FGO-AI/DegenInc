@@ -27,6 +27,11 @@ service cloud.firestore {
     // signed-in member once memberAccessAt has passed. Staff see everything,
     // which each rule adds itself.
     //
+    // THIS MUST AGREE WITH isVisible() IN src/lib/visibility.ts, which makes
+    // the same decision for the Next server. The server reads with the Admin
+    // SDK, which these rules do not apply to, so it cannot lean on them.
+    // Change one, change the other, the same way.
+    //
     // Closed-means-visible is a deliberate change from the original Postgres
     // filing_is_visible(), which applied the timestamp test to closed filings
     // too: a filing closed before its publicAt ever passed stayed hidden for
@@ -34,7 +39,8 @@ service cloud.firestore {
     //
     // request.time is the server's clock, never the client's. "Member" means
     // any signed-in account, as it always has in this codebase — including one
-    // whose role claim a Cloud Function has not set yet.
+    // with no role claim at all, which is every account until
+    // scripts/promote-role.mjs makes it staff or owner.
     //
     // The comparisons are deliberately bare. A missing or non-timestamp field
     // makes its branch an evaluation error, which grants nothing — "not yet",
@@ -57,7 +63,7 @@ service cloud.firestore {
     // createdAt is the server's clock, never the client's: the client sends
     // serverTimestamp(), which arrives here as exactly request.time. A missing
     // field fails the comparison, so this also makes createdAt required, as
-    // it was NOT NULL in D1 — where the server filled it in, never the client.
+    // it was NOT NULL in the old SQL schema, where the server filled it in.
     function isCreatedNow() {
       return request.resource.data.createdAt == request.time;
     }
@@ -101,15 +107,27 @@ service cloud.firestore {
       // in the same write as the filing, so they cannot drift apart.
       allow read: if isVisible(resource.data.filingStatus, resource.data) || isStaff();
       allow write: if false;
+    }
 
-      // A variant is exactly as visible as its product, time windows included:
-      // sizes and stock for a product still in its members' window are not
-      // public either. The one get() reads the product's own copies, the
-      // same fields its read rule uses.
-      match /variants/{variantId} {
-        allow read: if productIsVisible(productId) || isStaff();
-        allow write: if false;
-      }
+    // ---------------- variants ----------------
+    // Top level, not under products: the bag and checkout know a variant by
+    // its id alone, so the id is unique on its own and the product it belongs
+    // to is a field, productId.
+    //
+    // A variant is exactly as visible as its product, time windows included:
+    // sizes and stock for a product still in its members' window are not
+    // public either. The one get() reads the product's own copies, the same
+    // fields its read rule uses — found through resource.data.productId.
+    //
+    // QUERIES MUST FILTER ON productId. A query is allowed only if the rule
+    // holds for every document it could return, and for get() to know which
+    // product to read, the query has to pin productId with
+    // where("productId", "==", id). A variant query without that filter is
+    // refused, even when every variant it would return is public. Staff are
+    // the exception: isStaff() holds without reading any product.
+    match /variants/{variantId} {
+      allow read: if productIsVisible(resource.data.productId) || isStaff();
+      allow write: if false;
     }
 
     // ---------------- orders / certificates / counters ----------------
@@ -129,13 +147,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // ---------------- skus ----------------
-    // Global uniqueness lookup for variants.sku: unlike slug and (size,color),
-    // there is no natural parent to hang a doc id off for a constraint that
-    // spans every product. Written only inside the same transaction as the
-    // variant it belongs to, by a Cloud Function. Same shape as counters: no
-    // client, staff included, ever reads or writes this directly.
+    // ---------------- uniqueness lookups ----------------
+    // One document per unique value, its id the value itself: a filing number,
+    // a product slug, a SKU, a product's size and colour. Each is created with
+    // create() in the same transaction as the record that owns the value, and
+    // create() fails if the document already exists — that is what keeps the
+    // value unique. Written and read only by the Cloud Functions; no client,
+    // staff included, touches them.
+    match /filingNumbers/{number} {
+      allow read, write: if false;
+    }
+
+    match /slugs/{slug} {
+      allow read, write: if false;
+    }
+
     match /skus/{sku} {
+      allow read, write: if false;
+    }
+
+    match /variantKeys/{key} {
       allow read, write: if false;
     }
 
@@ -145,7 +176,7 @@ service cloud.firestore {
     // SQL schema used a unique constraint on (filing_id, member_id).
     //
     // A vote is for an open-call submission, not a product (votes.submission_id
-    // in the D1 schema). Submissions carry no filingId, so "this submission
+    // in the old SQL schema). Submissions carry no filingId, so "this submission
     // belongs to this filing" cannot be checked; the stand-in is that the
     // submission exists and staff have approved it.
     match /votes/{voteId} {
@@ -165,7 +196,7 @@ service cloud.firestore {
     // legitimately sends: exactly these fields, arriving as 'new'. The review
     // fields (reviewedBy, reviewedAt) and every other status are staff's to
     // set, through allow update. name, contact, workUrl and createdAt are
-    // required, as they were NOT NULL in the D1 schema; note is optional.
+    // required, as they were NOT NULL in the old SQL schema; note is optional.
     match /submissions/{submissionId} {
       allow create: if request.resource.data.keys().hasOnly(['name', 'contact', 'workUrl', 'note', 'status', 'createdAt'])
                     && request.resource.data.keys().hasAll(['name', 'contact', 'workUrl', 'status', 'createdAt'])

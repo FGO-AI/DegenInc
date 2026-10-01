@@ -4,10 +4,10 @@
 # nothing else, so the preview has no database, no sign-in and no checkout:
 # scripts/preview-export.mjs stages away /api, /account and /admin before the
 # export, and the filing grid falls back to its "awaiting asset" slots because
-# getLiveFilingSafe() returns null with no D1 binding.
+# getLiveFilingSafe() returns null with no Firestore to read.
 #
-# The real deployment is Cloudflare Workers (`npm run deploy`), which runs all
-# of it. See README "Cloudflare deployment".
+# The real deployment is Firebase App Hosting, which builds from GitHub on its
+# own and runs all of it. See README "Deploying".
 name: Pages preview
 
 on:
@@ -39,10 +39,6 @@ jobs:
           cache: npm
 
       - run: npm ci
-
-      # Emits cloudflare-env.d.ts, which is gitignored but which the type check
-      # during `next build` needs. Same thing the `prebuild` hook does locally.
-      - run: npm run cf-typegen
 
       # basePath comes from GITHUB_REPOSITORY, which Actions sets, so the export
       # is prefixed with /<repo> exactly as Pages serves it.

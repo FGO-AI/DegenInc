@@ -22,13 +22,16 @@ import {
 } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import {
-  doc, getDoc, serverTimestamp, setDoc, updateDoc,
+  collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
 
 const testEnv = await initializeTestEnvironment({
   projectId: "demo-degen-inc",
   firestore: { rules: readFileSync("firestore.rules", "utf8") },
 });
+// Start from nothing, so this suite gives the same answers whether or not
+// another one ran against the same emulator first.
+await testEnv.clearFirestore();
 
 const DAY = 24 * 60 * 60 * 1000;
 const past = new Date(Date.now() - DAY);
@@ -67,17 +70,18 @@ async function seed() {
     await setDoc(doc(db, "products/p-early"), { filingId: "f-live", filingStatus: "live", memberAccessAt: future, publicAt: future, name: "Not Yet Tee" });
     await setDoc(doc(db, "products/p-own-public"), { filingId: "f-members", filingStatus: "live", memberAccessAt: past, publicAt: past, name: "Already Public Tee" });
 
-    // Variants carry no visibility fields of their own; they answer to their
-    // product's.
-    await setDoc(doc(db, "products/p-members/variants/v-m"), { size: "M", color: "Black", stock: 3 });
-    await setDoc(doc(db, "products/p-early/variants/v-l"), { size: "L", color: "Black", stock: 5 });
+    // Variants carry no visibility fields of their own; they answer to the
+    // product named in their productId.
+    await setDoc(doc(db, "variants/v-live"), { productId: "p-live", size: "S", color: "Black", stock: 4 });
+    await setDoc(doc(db, "variants/v-m"), { productId: "p-members", size: "M", color: "Black", stock: 3 });
+    await setDoc(doc(db, "variants/v-l"), { productId: "p-early", size: "L", color: "Black", stock: 5 });
   });
 }
 
 function anon() { return testEnv.unauthenticatedContext().firestore(); }
 function member(uid) { return testEnv.authenticatedContext(uid, { role: "member" }).firestore(); }
 function staff(uid) { return testEnv.authenticatedContext(uid, { role: "staff" }).firestore(); }
-// Signed up a moment ago: the Cloud Function has not set the role claim yet.
+// No role claim at all: every account, until scripts/promote-role.mjs promotes it.
 function noClaim(uid) { return testEnv.authenticatedContext(uid).firestore(); }
 
 let pass = 0, fail = 0;
@@ -152,12 +156,30 @@ await check("counters are never client-readable or client-writable", async () =>
   await assertFails(getDoc(doc(staff("s1"), "counters/certificates")));
 });
 
-await check("skus are never client-readable or client-writable", async () => {
-  await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), "skus/DGN-001-M-BLK"), { productId: "p-live" });
+// Checkout's writes: only the server writes stock, orders, their lines and the
+// certificate counter. order_items is not a collection — an order's lines live
+// inside it — so no rule names it, and default-deny has to cover it.
+for (const path of ["variants/v-live", "orders/o-new", "order_items/i-new", "counters/certificates"]) {
+  await check(`no client, staff included, can write ${path.split("/")[0]}`, async () => {
+    await assertFails(setDoc(doc(staff("s1"), path), { stock: 99, memberId: "s1", value: 0 }));
+    await assertFails(setDoc(doc(member("u1"), path), { stock: 99, memberId: "u1", value: 0 }));
   });
-  await assertFails(getDoc(doc(staff("s1"), "skus/DGN-001-M-BLK")));
+}
+
+await check("a member cannot change a variant's stock, even by one field", async () => {
+  await assertFails(updateDoc(doc(member("u1"), "variants/v-live"), { stock: 999 }));
 });
+
+// The four uniqueness lookups: Cloud Functions only, staff included.
+for (const path of ["filingNumbers/001", "slugs/night-shift-tee", "skus/DGN-001-M-BLK", "variantKeys/p-live_S_Black"]) {
+  await check(`${path.split("/")[0]} are never client-readable or client-writable`, async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), path), { owner: "seeded" });
+    });
+    await assertFails(getDoc(doc(staff("s1"), path)));
+    await assertFails(setDoc(doc(staff("s1"), `${path}-new`), { owner: "staff" }));
+  });
+}
 
 // ---------------- submissions: what a public create may carry ----------------
 
@@ -229,7 +251,7 @@ await check(`anon cannot read a live filing in its members' window (${whenVsSoon
   await assertFails(getDoc(doc(anon(), "filings/f-members")));
 });
 
-await check("a signed-in account with no role claim yet gets the members' window too", async () => {
+await check("a signed-in account with no role claim gets the members' window too", async () => {
   await assertSucceeds(getDoc(doc(noClaim("n1"), "filings/f-members")));
 });
 
@@ -266,19 +288,49 @@ await check("anon can read a product whose own copy is public, though its filing
 // ---------------- variants: exactly as visible as their product ----------------
 
 await check(`anon cannot read a variant of a product in its members' window (${whenVsSoon()})`, async () => {
-  await assertFails(getDoc(doc(anon(), "products/p-members/variants/v-m")));
+  await assertFails(getDoc(doc(anon(), "variants/v-m")));
 });
 
 await check(`a member can read a variant of a product in its members' window (${whenVsSoon()})`, async () => {
-  await assertSucceeds(getDoc(doc(member("m1"), "products/p-members/variants/v-m")));
+  await assertSucceeds(getDoc(doc(member("m1"), "variants/v-m")));
 });
 
 await check("a member cannot read a variant of a product before its memberAccessAt", async () => {
-  await assertFails(getDoc(doc(member("m1"), "products/p-early/variants/v-l")));
+  await assertFails(getDoc(doc(member("m1"), "variants/v-l")));
 });
 
 await check("staff can read a variant of a product nobody else can see yet", async () => {
-  await assertSucceeds(getDoc(doc(staff("s1"), "products/p-early/variants/v-l")));
+  await assertSucceeds(getDoc(doc(staff("s1"), "variants/v-l")));
+});
+
+// Variant queries: the rule reads the product through resource.data.productId,
+// so it can only be checked for a query that pins productId.
+const variantsOf = (db, productId) => query(collection(db, "variants"), where("productId", "==", productId));
+
+await check("a variant query filtered on a public product's productId is allowed, for anon", async () => {
+  await assertSucceeds(getDocs(variantsOf(anon(), "p-live")));
+});
+
+await check(`a variant query filtered on a members'-window product is refused for anon (${whenVsSoon()})`, async () => {
+  await assertFails(getDocs(variantsOf(anon(), "p-members")));
+});
+
+await check(`the same query is allowed for a member (${whenVsSoon()})`, async () => {
+  await assertSucceeds(getDocs(variantsOf(member("m1"), "p-members")));
+});
+
+await check("a variant query without a productId filter is refused, even for a member", async () => {
+  await assertFails(getDocs(collection(member("m1"), "variants")));
+});
+
+// The only size-S variant is v-live, on a public product — so this is refused
+// for the missing filter, not for anything it would return.
+await check("a variant query filtered on another field is refused, though all it matches is public", async () => {
+  await assertFails(getDocs(query(collection(anon(), "variants"), where("size", "==", "S"))));
+});
+
+await check("staff can query variants without a productId filter", async () => {
+  await assertSucceeds(getDocs(collection(staff("s1"), "variants")));
 });
 
 // ---------------- after publicAt has passed on the emulator's clock ----------------
@@ -295,7 +347,11 @@ await check(`anon can read the members'-window product once publicAt has passed 
 });
 
 await check(`anon can read that product's variant once publicAt has passed (${whenVsSoon()})`, async () => {
-  await assertSucceeds(getDoc(doc(anon(), "products/p-members/variants/v-m")));
+  await assertSucceeds(getDoc(doc(anon(), "variants/v-m")));
+});
+
+await check(`and a variant query filtered on it is allowed for anon now (${whenVsSoon()})`, async () => {
+  await assertSucceeds(getDocs(variantsOf(anon(), "p-members")));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

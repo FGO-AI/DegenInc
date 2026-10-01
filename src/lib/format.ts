@@ -25,8 +25,8 @@ export function money(cents: number): string {
 /**
  * A filing-office date stamp: 2026.03.14.
  *
- * Fixed format, always UTC. `toLocaleDateString` would render in the Worker's
- * timezone, which is not the reader's, and would drift between the Cloudflare
+ * Fixed format, always UTC. `toLocaleDateString` would render in the server's
+ * timezone, which is not the reader's, and would drift between the production
  * runtime and a local `next dev` — so a printed date could disagree with
  * itself depending on where it was rendered.
  */

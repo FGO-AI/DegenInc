@@ -1,5 +1,5 @@
-// Ported verbatim from src/lib/images.ts — pure byte-sniffing logic with no
-// Cloudflare/R2 dependency, so it copies unchanged into Node.
+// Pure byte-sniffing logic, tied to nothing about where the bytes are stored,
+// ported unchanged from the app's original image module.
 
 /** Largest image accepted, in bytes. */
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;

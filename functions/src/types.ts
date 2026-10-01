@@ -1,6 +1,5 @@
-// Mirrors src/lib/db/admin.ts's ActionResult<T> so Filings.tsx's useSubmit()
-// needs no changes when it's later wired to call these functions instead of
-// the D1 Server Actions it calls today.
+// The same ActionResult<T> as src/lib/catalogue/client.ts, which is how the
+// admin console calls these functions, and what Filings.tsx's useSubmit() reads.
 export type ActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };

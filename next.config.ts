@@ -4,14 +4,14 @@ import type { NextConfig } from "next";
  * Static preview build (PREVIEW=1), used by .github/workflows/pages.yml.
  *
  * GitHub Pages serves files, not a Node runtime, so this mode drops the whole
- * server half of the app: no D1, no Better Auth, no checkout. What survives is
- * the storefront design, which is the point — it is a link to send someone so
- * they can look at it.
+ * server half of the app: no database, no sign-in, no checkout. What survives
+ * is the storefront design, which is the point — it is a link to send someone
+ * so they can look at it.
  *
- * getLiveFilingSafe() already returns null when there is no D1 binding and the
+ * getLiveFilingSafe() returns null when there is no Firestore to read, and the
  * grid falls back to its "awaiting asset" slots, so the prerender needs no
  * database. scripts/preview-export.mjs stages away the routes that genuinely
- * cannot be exported (/api, /account, /admin) before calling next build.
+ * cannot be exported (/api, /account, /admin, ...) before calling next build.
  *
  * Pages serves a project site from /<repo>, so every asset and link needs that
  * prefix or the page loads as unstyled HTML. Derived from GITHUB_REPOSITORY so
@@ -35,27 +35,23 @@ const preview: NextConfig =
       }
     : {};
 
+/**
+ * The browser's Firebase web-app config, inlined at build time.
+ *
+ * src/lib/firebase/client.ts reads NEXT_PUBLIC_FIREBASE_CONFIG. Locally,
+ * .env.development sets it to the emulator's demo project. On App Hosting
+ * nothing sets it by hand: App Hosting puts the backend's web-app config in
+ * FIREBASE_WEBAPP_CONFIG during the build, and this hands it over. Set
+ * NEXT_PUBLIC_FIREBASE_CONFIG yourself and that wins.
+ */
+const webAppConfig =
+  !process.env.NEXT_PUBLIC_FIREBASE_CONFIG && process.env.FIREBASE_WEBAPP_CONFIG
+    ? { NEXT_PUBLIC_FIREBASE_CONFIG: process.env.FIREBASE_WEBAPP_CONFIG }
+    : undefined;
+
 const nextConfig: NextConfig = {
-  experimental: {
-    serverActions: {
-      // The default is 1MB, and a product photo off a phone is routinely more.
-      // uploadProductImage() takes the file through a Server Action, so the cap
-      // has to clear MAX_IMAGE_BYTES (8MB, src/lib/images.ts) plus the
-      // multipart overhead of the rest of the form. The action enforces 8MB
-      // itself; this only has to not get in the way first.
-      bodySizeLimit: "10mb",
-    },
-  },
+  ...(webAppConfig ? { env: webAppConfig } : {}),
   ...preview,
 };
 
 export default nextConfig;
-
-// `next dev` runs in plain Node with no Workers runtime, so bindings like
-// env.DB would be undefined and every query would fail with an opaque error.
-// This starts a miniflare instance alongside the dev server and makes
-// getCloudflareContext() resolve the same bindings dev and prod.
-//
-// Dev only — it is a no-op in the production build.
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-void initOpenNextCloudflareForDev();

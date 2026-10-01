@@ -1,18 +1,21 @@
 /**
- * Proves a stock-1 variant cannot be bought twice.
+ * Proves a stock-1 variant cannot be bought twice, against a running app.
  *
  * Fires N checkouts at the same variant simultaneously and asserts that
- * exactly one commits. The rest must fail on variants_stock_non_negative —
- * not silently succeed against a stale read.
+ * exactly one commits. The rest must come back out_of_stock: the checkout
+ * transaction re-reads the stock each time Firestore runs it again, so none
+ * can succeed against a stale read. app.test.mjs proves the same thing against
+ * the emulators; this is for poking a running dev server by hand.
  *
- * Usage:  node scripts/concurrent-checkout.mjs <cookieHeader> [variantId] [n]
+ * Usage:  node scripts/concurrent-checkout.mjs <cookieHeader> <variantId> [n]
+ *         (cookieHeader is "__session=..." from a signed-in browser)
  */
-const [, , cookie, variantId = "var_02", nRaw = "2"] = process.argv;
+const [, , cookie, variantId, nRaw = "2"] = process.argv;
 const n = Number(nRaw);
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 
-if (!cookie) {
-  console.error("Need a session cookie header as argv[2]");
+if (!cookie || !variantId) {
+  console.error("Usage: node scripts/concurrent-checkout.mjs <cookieHeader> <variantId> [n]");
   process.exit(1);
 }
 

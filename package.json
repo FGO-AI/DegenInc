@@ -4,25 +4,21 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npm run cf-typegen",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "build:cf": "npm run cf-typegen && opennextjs-cloudflare build",
-    "preview": "npm run build:cf && opennextjs-cloudflare preview",
-    "deploy": "npm run build:cf && opennextjs-cloudflare deploy",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply degen-inc --local",
-    "db:migrate:remote": "wrangler d1 migrations apply degen-inc --remote",
-    "db:seed": "wrangler d1 execute degen-inc --local --file scripts/seed.sql",
+    "emulators": "npm --prefix functions run build && firebase emulators:start --project demo-degen-inc",
+    "seed:emulator": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed-emulator.ts",
     "preview:pages": "node scripts/preview-export.mjs",
+    "test": "node rules.test.mjs && node functions.test.mjs && node app.test.mjs",
+    "test:emulators": "npm --prefix functions run build && firebase emulators:exec --project demo-degen-inc \"npm test\"",
     "test:rules": "firebase emulators:exec --only firestore --project demo-degen-inc \"node rules.test.mjs\"",
-    "test:functions": "npm --prefix functions run build && firebase emulators:exec --only functions,firestore,auth,storage --project demo-degen-inc \"node functions.test.mjs\""
+    "test:functions": "npm --prefix functions run build && firebase emulators:exec --only functions,firestore,auth,storage --project demo-degen-inc \"node functions.test.mjs\"",
+    "test:app": "npm --prefix functions run build && firebase emulators:exec --only functions,firestore,auth,storage --project demo-degen-inc \"node app.test.mjs\""
   },
   "dependencies": {
-    "better-auth": "^1.7.1",
-    "drizzle-orm": "^0.45.2",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -30,17 +26,12 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
-    "@opennextjs/cloudflare": "^1.20.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
-    "firebase": "^12.19.0",
-    "firebase-admin": "^14.5.0",
     "firebase-tools": "^15.31.0",
-    "typescript": "^5",
-    "wrangler": "^4.123.0"
+    "typescript": "^5"
   }
 }

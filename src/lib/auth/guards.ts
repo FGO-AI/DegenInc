@@ -1,21 +1,26 @@
 import "server-only";
 
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
-import { getAuth } from "./index";
+import { adminAuth } from "@/lib/firebase/admin";
+import { SESSION_COOKIE } from "./session";
 
 /**
- * The authorization layer.
+ * The authorization layer for the server.
  *
- * This module is what replaced Row Level Security. Under Postgres the database
- * refused to return rows the caller shouldn't see; D1 will hand back anything
- * it is asked for. So authorization is application code — code you can forget
- * to write — and every non-public data function calls one of these first.
+ * The Next server reads and writes Firestore with the Admin SDK, which bypasses
+ * firestore.rules entirely. The rules protect the browser and mobile apps; on
+ * this path the database refuses nothing. So authorization here is application
+ * code — code you can forget to write — and every non-public data function
+ * calls one of these first.
  *
- * These read the session from the request cookie and verify it against the
- * database. Never derive a role from anything the client sent.
+ * These read the session cookie and verify it with Firebase Authentication.
+ * The role is the account's custom claim, set only by the Admin SDK
+ * (scripts/promote-role.mjs, functions/src/auth.ts) — the same claim
+ * firestore.rules' role() reads. Never derive a role from anything the client
+ * sent.
  */
 
 export type SessionUser = {
@@ -29,33 +34,35 @@ export type SessionUser = {
  * Current session, or null when signed out.
  *
  * Wrapped in React's `cache` so a layout and the page beneath it share one
- * lookup per request rather than hitting D1 twice.
+ * verification per request.
  */
 export const getSession = cache(async (): Promise<SessionUser | null> => {
-  // Stop prerendering BEFORE touching auth.
-  //
-  // Next tries to render every route at build time to see whether it can be
-  // static. headers() would signal "dynamic" and bail out — but getAuth()
-  // used to run first and threw on the missing BETTER_AUTH_SECRET, failing
-  // the build before Next ever got that signal. A runtime secret must not be
-  // required to compile.
-  //
-  // connection() resolves only at request time, so during a build this
-  // function stops here and the route is excluded from prerendering.
+  // Stop prerendering BEFORE touching auth. connection() resolves only at
+  // request time, so during a build this function stops here and the route is
+  // excluded from prerendering, rather than the build trying to verify a
+  // cookie that does not exist.
   await connection();
 
-  const requestHeaders = await headers();
-  const auth = await getAuth();
-  const result = await auth.api.getSession({ headers: requestHeaders });
+  const cookie = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!cookie) return null;
 
-  if (!result?.user) return null;
+  let claims;
+  try {
+    // true: also check revocation, so a sign-out or a role change ends this
+    // session now, not when the cookie runs out.
+    claims = await adminAuth().verifySessionCookie(cookie, true);
+  } catch {
+    return null;
+  }
 
-  const role = (result.user as { role?: string }).role;
+  // Anything other than the two elevated roles is a member — including no
+  // role claim at all, which is every account until it is promoted.
+  const role = claims.role;
 
   return {
-    id: result.user.id,
-    email: result.user.email,
-    name: result.user.name,
+    id: claims.uid,
+    email: claims.email ?? "",
+    name: typeof claims.name === "string" ? claims.name : "",
     role: role === "staff" || role === "owner" ? role : "member",
   };
 });

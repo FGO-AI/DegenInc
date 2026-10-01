@@ -12,12 +12,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Cloudflare adapter output. `.open-next/` is the bundled Next server and
-    // `cloudflare-env.d.ts` is emitted by `wrangler types`; linting either
-    // reports tens of thousands of problems in code we do not author.
-    ".open-next/**",
-    ".wrangler/**",
-    "cloudflare-env.d.ts",
     // Cloud Functions: a separate package with its own tsconfig, build and
     // dependencies, installed on its own. The app's build never installs
     // functions/node_modules, so linting or type-checking it from here would

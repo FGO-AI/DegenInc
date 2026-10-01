@@ -122,8 +122,8 @@ function Shot({
   return (
     <div className={cx(styles.frame, "rough")}>
       {image ? (
-        // Plain <img>, not next/image: the optimiser needs a Cloudflare Images
-        // binding this app deliberately skips. See src/lib/images.ts.
+        // Plain <img>, not next/image: /images/... decides per request who may
+        // see an image, and the optimiser would serve its own cached copy to anyone.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className={styles.photo}

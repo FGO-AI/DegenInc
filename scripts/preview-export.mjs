@@ -3,9 +3,9 @@
  *
  *   npm run preview:pages
  *
- * `output: "export"` refuses to build a route that needs a request: a Better
- * Auth catch-all handler, a checkout POST, a page that reads the session, a
- * layout that redirects. Next has no "exclude this route from the export"
+ * `output: "export"` refuses to build a route that needs a request: the
+ * session handler, a checkout POST, a page that reads the session, a layout
+ * that redirects. Next has no "exclude this route from the export"
  * switch, so the only way through is to take those routes out of src/app for
  * the duration of the build and put them back afterwards.
  *
@@ -36,12 +36,12 @@ const STAGE = join(root, ".preview-staged");
 
 /** Routes that cannot be statically exported, and why. */
 const EXCLUDED = [
-  ["src/app/api", "auth, checkout and cart-detail handlers; all need a request"],
-  ["src/app/account", "reads the session via headers(), so it is always dynamic"],
+  ["src/app/api", "session, checkout and cart-detail handlers; all need a request"],
+  ["src/app/account", "reads the session cookie, so it is always dynamic"],
   ["src/app/admin", "requireStaff() redirects in the layout"],
-  ["src/app/images", "streams from the R2 binding; there is no bucket on Pages"],
+  ["src/app/images", "streams from Cloud Storage per request; there is no bucket on Pages"],
   ["src/app/cart", "reads the session and hands out a Server Action"],
-  ["src/app/product", "a page per live product, read from D1 at request time"],
+  ["src/app/product", "a page per live product, read from Firestore at request time"],
 ];
 
 const moved = [];

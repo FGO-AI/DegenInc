@@ -1,13 +1,40 @@
 # Firebase App Hosting backend settings.
 #
 # App Hosting builds this repo with `npm run build` and serves it with Next's
-# own server on Cloud Run — plain Node, not the Workers runtime. Until the data
-# layer moves to Firestore, what it serves is the D1-backed site with no D1:
-# the storefront renders its "awaiting asset" slots (getLiveFilingSafe() returns
-# null), and every page that needs the database errors.
+# own server on Cloud Run. The app reads and writes Firestore, Authentication
+# and Cloud Storage through the Admin SDK, with the runtime's own credentials:
+# there is no key file, and none belongs here.
+
 runConfig:
   # Scale to zero when idle, and cap scale-out. App Hosting needs the Blaze
   # plan, which bills per use, and the default ceiling is far above what a
   # small drop shop needs — a runaway client should hit this, not the bill.
   minInstances: 0
   maxInstances: 2
+
+# The app needs no environment variables of its own yet. App Hosting sets the
+# two it does need:
+#
+#   FIREBASE_CONFIG         build and runtime. The project and default bucket;
+#                           initializeApp() with no arguments reads it.
+#   FIREBASE_WEBAPP_CONFIG  build only. The web app's config; next.config.ts
+#                           inlines it as NEXT_PUBLIC_FIREBASE_CONFIG for the
+#                           browser SDK.
+#
+# None of the *_EMULATOR_HOST variables may ever be set here: they would point
+# production at emulators that are not there. They live only in
+# .env.development, which `next build` does not read.
+#
+# Secrets go in Cloud Secret Manager, never in this file. Set one with
+#   firebase apphosting:secrets:set NAME
+# and reference it below by name. Stripe's keys will be the first:
+#
+# env:
+#   - variable: STRIPE_SECRET_KEY
+#     secret: STRIPE_SECRET_KEY
+#     availability:
+#       - RUNTIME
+#   - variable: STRIPE_WEBHOOK_SECRET
+#     secret: STRIPE_WEBHOOK_SECRET
+#     availability:
+#       - RUNTIME

@@ -10,59 +10,60 @@ import {
   pad,
 } from "./validation";
 import type { FilingStatus } from "./types";
+import { claimingUnique } from "./unique";
 
 /**
- * Mirrors src/lib/db/admin.ts's createFiling() (lines 54-85).
+ * The console's createFiling(), with the two times every filing now needs.
  *
- * Doc id = the padded filing number, not a random id — the same reasoning as
- * slug-as-id for products (products.ts): Firestore's own "the doc already
- * exists" failure on create() IS the uniqueness constraint, matching D1's
- * UNIQUE on filings.number with no read-then-check needed. Nothing elsewhere
- * depends on filing ids being opaque (votes and products just store
- * whatever string this is).
+ * The filing gets a random id; its number, which must be unique, is held by
+ * a filingNumbers/{number} lookup created in the same transaction (unique.ts).
  *
- * publicAt/memberAccessAt are accepted as optional inputs here. D1 never
- * sets these anywhere in the app — confirmed by grep, they exist only as
- * migration column definitions and scripts/seed.sql fixture constants — so
- * there's no business rule to preserve, and none is invented here.
- * updateFilingStatus() below refuses to go live without both set, rather
- * than defaulting or silently leaving the filing unable to ever become
- * visible.
+ * Both times are required, and the public one must come strictly after the
+ * members' one. Required because nothing can set them later — there is no
+ * function to edit a filing — and a filing without them can never go live.
+ * Checked here, not only in the console's form, because a form is a courtesy
+ * and this is the only way in.
  */
 export const createFiling = onCall(async (request) => {
-  requireStaff(request);
+  await requireStaff(request);
 
   return attempt(async () => {
     const data = request.data ?? {};
     const number = wholeNumber(data.number, "Filing number", 1, 999);
     const title = words(data.title, "Title", 120);
-    const publicAt = optionalTimestamp(data.publicAt, "Public date");
     const memberAccessAt = optionalTimestamp(data.memberAccessAt, "Member access date");
-    if (publicAt && memberAccessAt && memberAccessAt.toMillis() > publicAt.toMillis()) {
-      throw new Rejected("Member access cannot start after the public date.");
+    const publicAt = optionalTimestamp(data.publicAt, "Public date");
+    if (!memberAccessAt || !publicAt) {
+      throw new Rejected("Set when members get in and when the public does.");
+    }
+    if (publicAt.toMillis() <= memberAccessAt.toMillis()) {
+      throw new Rejected("The public date has to be after the members' date.");
     }
 
-    const filingId = pad(number);
-    const filingRef = db.collection("filings").doc(filingId);
+    const filingRef = db.collection("filings").doc();
+    const numberRef = db.collection("filingNumbers").doc(pad(number));
+    const taken = `Filing ${pad(number)} already exists.`;
 
-    const filing = await db.runTransaction(async (t) => {
-      const snap = await t.get(filingRef);
-      if (snap.exists) throw new Rejected(`Filing ${pad(number)} already exists.`);
+    const filing = await claimingUnique({ filingNumbers: taken }, () =>
+      db.runTransaction(async (t) => {
+        if ((await t.get(numberRef)).exists) throw new Rejected(taken);
 
-      const doc = {
-        number,
-        title,
-        status: "draft" as const,
-        ...(publicAt ? { publicAt } : {}),
-        ...(memberAccessAt ? { memberAccessAt } : {}),
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      };
-      t.create(filingRef, doc);
-      return doc;
-    });
+        const doc = {
+          number,
+          title,
+          status: "draft" as const,
+          memberAccessAt,
+          publicAt,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        t.create(numberRef, { filingId: filingRef.id });
+        t.create(filingRef, doc);
+        return doc;
+      }),
+    );
 
-    return { id: filingId, number: filing.number, title: filing.title, status: filing.status, products: [] };
+    return { id: filingRef.id, number: filing.number, title: filing.title, status: filing.status, products: [] };
   });
 });
 
@@ -77,12 +78,12 @@ const PREVIOUS: Record<FilingStatus, FilingStatus | null> = {
 };
 
 /**
- * Mirrors src/lib/db/admin.ts's updateFilingStatus() (lines 127-178).
+ * The console's updateFilingStatus().
  *
- * OWNER ONLY, same as D1 — "Taking a filing live is what puts it in front
+ * OWNER ONLY, as it always was — "Taking a filing live is what puts it in front
  * of customers."
  *
- * D1 enforces "one live filing" with a partial UNIQUE index, since a CHECK
+ * The old SQL schema held "one live filing" with a partial UNIQUE index; a CHECK
  * constraint can't see prior state. Firestore has no partial unique index,
  * so this reads `filings where status == 'live'` *inside* the transaction
  * before writing, and leans on Firestore's serializable isolation: two
@@ -95,14 +96,16 @@ const PREVIOUS: Record<FilingStatus, FilingStatus | null> = {
  * emulator with two go-live calls genuinely overlapping, and again with two
  * raw transactions held open between their read and their write.
  *
- * Going live (or closing) also pushes filingStatus/publicAt/memberAccessAt
- * onto every product in the filing, in this SAME transaction — the
- * invariant firestore.rules' own comments assume ("kept in sync by whichever
- * Cloud Function owns filing status changes, all three fields together, not
- * as separate updates that could drift").
+ * Every transition — scheduling, going live, closing — also writes the
+ * filing's status, publicAt and memberAccessAt onto every one of its
+ * products, in this SAME transaction. firestore.rules and
+ * src/lib/visibility.ts both read a product's own copies, never its filing,
+ * so a filing and its products must never disagree, not even for a moment
+ * between two writes. A time the filing lacks (only a filing seeded or made
+ * before times were required) is removed from the products too.
  */
 export const updateFilingStatus = onCall(async (request) => {
-  requireOwner(request);
+  await requireOwner(request);
 
   return attempt(async () => {
     const data = request.data ?? {};
@@ -132,9 +135,7 @@ export const updateFilingStatus = onCall(async (request) => {
       const liveSnap = status === "live"
         ? await t.get(db.collection("filings").where("status", "==", "live"))
         : null;
-      const productsSnap = (status === "live" || status === "closed")
-        ? await t.get(db.collection("products").where("filingId", "==", filingId))
-        : null;
+      const productsSnap = await t.get(db.collection("products").where("filingId", "==", filingId));
       const stateSnap = status === "closed" ? await t.get(stateRef) : null;
 
       if (status === "live") {
@@ -149,25 +150,19 @@ export const updateFilingStatus = onCall(async (request) => {
       // ---- writes ----
       t.update(filingRef, { status, updatedAt: FieldValue.serverTimestamp() });
 
-      if (status === "live") {
-        for (const p of productsSnap!.docs) {
-          t.update(p.ref, {
-            filingStatus: "live",
-            publicAt: filing.publicAt,
-            memberAccessAt: filing.memberAccessAt,
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-        }
-        t.set(stateRef, { filingId });
+      for (const p of productsSnap.docs) {
+        t.update(p.ref, {
+          filingStatus: status,
+          publicAt: filing.publicAt ?? FieldValue.delete(),
+          memberAccessAt: filing.memberAccessAt ?? FieldValue.delete(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
       }
 
-      if (status === "closed") {
-        for (const p of productsSnap!.docs) {
-          t.update(p.ref, { filingStatus: "closed", updatedAt: FieldValue.serverTimestamp() });
-        }
-        if (stateSnap!.exists && stateSnap!.data()?.filingId === filingId) {
-          t.delete(stateRef);
-        }
+      if (status === "live") t.set(stateRef, { filingId });
+
+      if (status === "closed" && stateSnap!.exists && stateSnap!.data()?.filingId === filingId) {
+        t.delete(stateRef);
       }
 
       return { id: filingId, status };
